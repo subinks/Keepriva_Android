@@ -12,7 +12,7 @@ permissions:
 jobs:
   build-and-verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Checkout initial_commit
@@ -21,7 +21,7 @@ jobs:
           ref: initial_commit
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
@@ -31,56 +31,80 @@ jobs:
         with:
           gradle-version: "9.1.0"
 
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
       - name: Install Android SDK 36 build components
         shell: bash
         run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          which sdkmanager
+          sdkmanager --version
+
           yes | sdkmanager --licenses >/dev/null || true
+
           sdkmanager \
             "platform-tools" \
             "platforms;android-36" \
             "build-tools;36.0.0"
 
-      # Temporary CI-only edit. It is never committed back to the repository.
+      # This edit exists only inside the disposable GitHub Actions workspace.
+      # It is never committed back to the repository.
+      # Release/source FLAG_SECURE behavior remains unchanged.
       - name: Allow screenshots only in this CI debug build
         shell: python
         run: |
           from pathlib import Path
+          import re
 
           p = Path("app/src/main/java/com/example/privatevault/ScreenSecurityManager.java")
           text = p.read_text(encoding="utf-8")
 
-          old_activity = """    public static void protect(Activity activity) {
-              if (activity == null) return;
-              protectWindow(activity.getWindow());
-          """
-          new_activity = """    public static void protect(Activity activity) {
-              if (activity == null) return;
-              // CI visual verification only. This source edit is temporary.
-              if (BuildConfig.DEBUG) return;
-              protectWindow(activity.getWindow());
-          """
+          activity_pattern = re.compile(
+              r'(public static void protect\(Activity activity\) \{\s*'
+              r'if \(activity == null\) return;\s*)'
+              r'(protectWindow\(activity\.getWindow\(\)\);)',
+              re.MULTILINE
+          )
 
-          old_dialog = """    public static void protect(Dialog dialog) {
-              if (dialog == null) return;
-              protectWindow(dialog.getWindow());
-          }
-          """
-          new_dialog = """    public static void protect(Dialog dialog) {
-              if (dialog == null) return;
-              // CI visual verification only.
-              if (BuildConfig.DEBUG) return;
-              protectWindow(dialog.getWindow());
-          }
-          """
+          dialog_pattern = re.compile(
+              r'(public static void protect\(Dialog dialog\) \{\s*'
+              r'if \(dialog == null\) return;\s*)'
+              r'(protectWindow\(dialog\.getWindow\(\)\);)',
+              re.MULTILINE
+          )
 
-          if old_activity not in text:
-              raise SystemExit("Could not locate ScreenSecurityManager.protect(Activity)")
-          if old_dialog not in text:
-              raise SystemExit("Could not locate ScreenSecurityManager.protect(Dialog)")
+          text, activity_count = activity_pattern.subn(
+              r'\1'
+              '// CI visual verification only. This edit exists only in the disposable CI workspace.\n'
+              '        if (BuildConfig.DEBUG) return;\n'
+              r'        \2',
+              text,
+              count=1
+          )
 
-          text = text.replace(old_activity, new_activity, 1)
-          text = text.replace(old_dialog, new_dialog, 1)
+          text, dialog_count = dialog_pattern.subn(
+              r'\1'
+              '// CI visual verification only.\n'
+              '        if (BuildConfig.DEBUG) return;\n'
+              r'        \2',
+              text,
+              count=1
+          )
+
+          if activity_count != 1:
+              raise SystemExit(
+                  f"Expected to patch protect(Activity) exactly once; patched {activity_count}"
+              )
+
+          if dialog_count != 1:
+              raise SystemExit(
+                  f"Expected to patch protect(Dialog) exactly once; patched {dialog_count}"
+              )
+
           p.write_text(text, encoding="utf-8")
+          print("Temporary CI screenshot patch applied successfully.")
 
       - name: Verify manifest has no INTERNET permission
         shell: bash
@@ -91,12 +115,18 @@ jobs:
             echo "ERROR: INTERNET permission found."
             exit 1
           fi
+
           echo "PASS: no INTERNET permission found."
+
+      - name: Show Gradle and Java versions
+        shell: bash
+        run: |
+          java -version
+          gradle --version
 
       - name: Compile, lint, test, and build debug APK
         shell: bash
         run: |
-          gradle --version
           gradle \
             :app:lintDebug \
             :app:testDebugUnitTest \
@@ -109,9 +139,14 @@ jobs:
           test -f app/build/outputs/apk/debug/app-debug.apk
           ls -lh app/build/outputs/apk/debug/app-debug.apk
 
-      - name: Create screenshot output directory
+      - name: Create verification output directories
         shell: bash
-        run: mkdir -p ci-artifacts/screenshots ci-artifacts/ui
+        run: |
+          mkdir -p \
+            ci-artifacts/screenshots \
+            ci-artifacts/ui \
+            ci-artifacts/apk \
+            ci-artifacts/logs
 
       - name: Boot emulator, install app, and capture real screenshots
         uses: reactivecircus/android-emulator-runner@v2
@@ -131,15 +166,18 @@ jobs:
             set -euxo pipefail
 
             adb wait-for-device
+
             adb shell settings put global window_animation_scale 0
             adb shell settings put global transition_animation_scale 0
             adb shell settings put global animator_duration_scale 0
 
             adb install -r app/build/outputs/apk/debug/app-debug.apk
 
+            # Fresh installation / setup screen.
             adb shell monkey \
               -p com.example.privatevault.debug \
               -c android.intent.category.LAUNCHER 1
+
             sleep 4
 
             adb exec-out screencap -p \
@@ -149,6 +187,8 @@ jobs:
             adb pull /sdcard/keepriva-ui.xml \
               ci-artifacts/ui/01-fresh-install-ui.xml || true
 
+            # Create a deterministic TEST vault by driving the real UI.
+            # No real credentials are used.
             python3 - <<'PY'
             import re
             import subprocess
@@ -166,55 +206,95 @@ jobs:
                 )
 
             def dump():
-                adb("shell", "uiautomator", "dump", "/sdcard/window.xml", check=False)
-                result = adb("shell", "cat", "/sdcard/window.xml", check=False)
+                adb(
+                    "shell",
+                    "uiautomator",
+                    "dump",
+                    "/sdcard/window.xml",
+                    check=False
+                )
+
+                result = adb(
+                    "shell",
+                    "cat",
+                    "/sdcard/window.xml",
+                    check=False
+                )
+
                 if not result.stdout.strip():
                     raise RuntimeError("UI hierarchy dump is empty")
+
                 return ET.fromstring(result.stdout)
 
             def center(bounds):
                 nums = [int(x) for x in re.findall(r"\d+", bounds)]
+
                 if len(nums) != 4:
                     raise RuntimeError(f"Unexpected bounds: {bounds}")
+
                 x1, y1, x2, y2 = nums
                 return (x1 + x2) // 2, (y1 + y2) // 2
 
             def tap_node(node):
                 x, y = center(node.attrib["bounds"])
-                adb("shell", "input", "tap", str(x), str(y))
+
+                adb(
+                    "shell",
+                    "input",
+                    "tap",
+                    str(x),
+                    str(y)
+                )
+
                 time.sleep(0.5)
 
             root = dump()
+
             edits = [
-                n for n in root.iter("node")
+                n
+                for n in root.iter("node")
                 if n.attrib.get("class") == "android.widget.EditText"
             ]
 
             if len(edits) < 2:
                 raise RuntimeError(
-                    f"Expected two password fields on setup screen, found {len(edits)}"
+                    "Expected at least two password fields on setup screen; "
+                    f"found {len(edits)}"
                 )
 
             for node in edits[:2]:
                 tap_node(node)
-                adb("shell", "input", "text", PASSWORD)
+
+                adb(
+                    "shell",
+                    "input",
+                    "text",
+                    PASSWORD
+                )
+
                 time.sleep(0.5)
 
             root = dump()
+
             create_button = None
+
             for n in root.iter("node"):
-                text = n.attrib.get("text", "")
-                if "Create encrypted vault" in text:
+                label = n.attrib.get("text", "")
+
+                if "Create encrypted vault" in label:
                     create_button = n
                     break
 
             if create_button is None:
-                raise RuntimeError("Create encrypted vault button not found")
+                raise RuntimeError(
+                    "Create encrypted vault button was not found"
+                )
 
             tap_node(create_button)
             time.sleep(4)
             PY
 
+            # Home screen from the actual application.
             adb exec-out screencap -p \
               > ci-artifacts/screenshots/02-vault-home.png
 
@@ -222,11 +302,16 @@ jobs:
             adb pull /sdcard/keepriva-home-ui.xml \
               ci-artifacts/ui/02-vault-home-ui.xml || true
 
+            # Force close and relaunch the configured app.
+            # This gives us the ACTUAL Keepriva unlock screen.
             adb shell am force-stop com.example.privatevault.debug
+
             sleep 1
+
             adb shell monkey \
               -p com.example.privatevault.debug \
               -c android.intent.category.LAUNCHER 1
+
             sleep 4
 
             adb exec-out screencap -p \
@@ -237,26 +322,46 @@ jobs:
               ci-artifacts/ui/03-real-unlock-ui.xml || true
 
             adb shell dumpsys package com.example.privatevault.debug \
-              > ci-artifacts/package-dump.txt
+              > ci-artifacts/logs/package-dump.txt
+
+            adb logcat -d \
+              > ci-artifacts/logs/logcat.txt
 
       - name: Copy APK into artifact folder
         if: always()
         shell: bash
         run: |
           mkdir -p ci-artifacts/apk
+
           if [ -f app/build/outputs/apk/debug/app-debug.apk ]; then
-            cp app/build/outputs/apk/debug/app-debug.apk \
+            cp \
+              app/build/outputs/apk/debug/app-debug.apk \
               ci-artifacts/apk/Keepriva-debug.apk
           fi
 
-      - name: Upload APK, screenshots, UI dumps, and reports
+      - name: Copy lint/test reports when available
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p ci-artifacts/reports
+
+          if [ -f app/build/reports/lint-results-debug.html ]; then
+            cp \
+              app/build/reports/lint-results-debug.html \
+              ci-artifacts/reports/
+          fi
+
+          if [ -d app/build/reports/tests ]; then
+            cp -R \
+              app/build/reports/tests \
+              ci-artifacts/reports/
+          fi
+
+      - name: Upload APK, real screenshots, UI dumps, logs, and reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: keepriva-android-verification
-          path: |
-            ci-artifacts/**
-            app/build/reports/lint-results-debug.html
-            app/build/reports/tests/**
+          path: ci-artifacts/**
           if-no-files-found: warn
           retention-days: 14

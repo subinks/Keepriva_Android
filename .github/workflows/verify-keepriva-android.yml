@@ -191,7 +191,27 @@ jobs:
 
 
 
-          echo "=== Running Android instrumentation tests ==="
+          echo "=== KEEP EMULATOR AWAKE FOR ESPRESSO ==="
+
+# Large UI suites take long enough for the emulator display/keyguard to become
+# inactive. Espresso then sees Keepriva's root window but it has no focus,
+# producing RootViewWithoutFocusException across otherwise unrelated tests.
+adb wait-for-device
+adb shell input keyevent KEYCODE_WAKEUP || true
+adb shell wm dismiss-keyguard || true
+adb shell input keyevent 82 || true
+adb shell svc power stayon true || true
+adb shell settings put global stay_on_while_plugged_in 3 || true
+adb shell settings put system screen_off_timeout 2147483647 || true
+adb shell dumpsys deviceidle disable || true
+adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS || true
+sleep 2
+
+echo "=== Window / power state before instrumentation ==="
+adb shell dumpsys power | grep -E 'mWakefulness|Display Power' || true
+adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp|isStatusBarKeyguard' || true
+
+echo "=== Running Android instrumentation tests ==="
 
           gradle :app:connectedDebugAndroidTest --stacktrace
           # Launch Keepriva directly instead of going through Pixel Launcher.
@@ -468,5 +488,6 @@ echo "PASS: genuine biometric-enabled Keepriva lock screen captured."adb shell d
           path: ci-artifacts/**
           if-no-files-found: warn
           retention-days: 14
+
 
 

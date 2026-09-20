@@ -94,10 +94,15 @@ public abstract class KeeprivaTestBase {
     }
 
     protected void lockVault() {
-        onView(withText("Lock")).perform(scrollTo(), click());
+        /*
+         * The compact header Lock button lives at the top of a long ScrollView.
+         * A coordinate click can race an in-progress programmatic scroll on the
+         * CI emulator. Target its stable accessibility id and invoke the actual
+         * registered listener directly after bringing it into view.
+         */
+        onView(withContentDescription("Lock vault"))
+                .perform(scrollTo(), performClickDirectly());
 
-        // showUnlockScreen() replaces the Activity content view. Wait for the
-        // enabled Unlock button to be attached before the next Espresso action.
         waitForUnlockReady();
 
         onView(withText("Unlock")).check(matches(isDisplayed()));

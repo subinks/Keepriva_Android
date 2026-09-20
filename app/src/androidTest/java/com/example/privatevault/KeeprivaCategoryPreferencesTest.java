@@ -8,10 +8,12 @@ import static androidx.test.espresso.action.ViewActions.replaceText;
 import static androidx.test.espresso.action.ViewActions.scrollTo;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
+import static androidx.test.espresso.matcher.ViewMatchers.hasSibling;
 import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;
 import static androidx.test.espresso.matcher.ViewMatchers.withHint;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 import static androidx.test.espresso.matcher.RootMatchers.isDialog;
+import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.hasToString;
 import static org.hamcrest.Matchers.is;
 
@@ -182,7 +184,9 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
                 .perform(scrollTo())
                 .check(matches(isDisplayed()));
 
-        onView(withText("Category • 1 entry"))
+        onView(allOf(
+                withText("Category • 1 entry"),
+                hasSibling(withText("Login"))))
                 .perform(scrollTo())
                 .check(matches(isDisplayed()));
     }

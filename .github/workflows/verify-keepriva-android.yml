@@ -12,7 +12,7 @@ permissions:
 jobs:
   build-and-verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
 
     steps:
       - name: Checkout initial_commit
@@ -150,7 +150,26 @@ jobs:
             ci-artifacts/apk \
             ci-artifacts/logs
 
+      # GitHub-hosted Linux runners normally expose /dev/kvm, but the emulator
+      # runner may fall back to painfully slow software emulation if KVM is not
+      # accessible. Make the device node usable and print diagnostics first.
+      - name: Enable and verify KVM acceleration
+        shell: bash
+        run: |
+          echo "Runner kernel: $(uname -a)"
+          echo "CPU virtualization flags:"
+          grep -E -m1 -o 'vmx|svm' /proc/cpuinfo || true
+
+          if [ ! -e /dev/kvm ]; then
+            echo "ERROR: /dev/kvm is not available on this runner."
+            exit 1
+          fi
+
+          sudo chmod 666 /dev/kvm
+          ls -l /dev/kvm
+
       - name: Boot emulator, install app, and capture real screenshots
+        timeout-minutes: 12
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -158,8 +177,12 @@ jobs:
           profile: pixel_6
           target: google_apis
           disable-animations: true
+          disable-linux-hw-accel: false
+          emulator-boot-timeout: 180
           emulator-options: >-
             -no-window
+            -no-snapshot
+            -wipe-data
             -gpu swiftshader_indirect
             -noaudio
             -no-boot-anim
@@ -167,7 +190,13 @@ jobs:
           script: |
             set -euxo pipefail
 
+            echo "=== Emulator / ADB diagnostics ==="
+            adb version
+            adb devices -l
             adb wait-for-device
+            echo "boot_completed=$(adb shell getprop sys.boot_completed || true)"
+            echo "device=$(adb shell getprop ro.product.device || true)"
+            echo "sdk=$(adb shell getprop ro.build.version.sdk || true)"
 
             adb shell settings put global window_animation_scale 0
             adb shell settings put global transition_animation_scale 0

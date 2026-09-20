@@ -1445,14 +1445,55 @@ public class MainActivity extends Activity {
         });
         refresh.run();
 
+        // Keep the editor actions inside the custom dialog content instead of
+        // relying on AlertDialog's platform footer. On some API/theme combinations
+        // the very tall ScrollView consumes the dialog measurement and the standard
+        // positive/negative buttons are not exposed in the final view hierarchy.
+        // Explicit action buttons are both more reliable for users and testable by
+        // accessibility/Espresso.
+        LinearLayout editorRoot = baseVertical(8);
+
+        ScrollView editorScroll = wrap(form);
+        LinearLayout.LayoutParams scrollParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
+        editorRoot.addView(editorScroll, scrollParams);
+
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        actions.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+        actions.setPadding(0, dp(8), 0, 0);
+
+        Button cancelEditor = button("Cancel");
+        cancelEditor.setContentDescription("Cancel vault item");
+
+        Button saveEditor = primaryButton("Save");
+        saveEditor.setContentDescription("Save vault item");
+
+        actions.addView(cancelEditor);
+
+        LinearLayout.LayoutParams saveParams =
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT);
+        saveParams.leftMargin = dp(8);
+        actions.addView(saveEditor, saveParams);
+
+        editorRoot.addView(actions, matchWidth());
+
         AlertDialog d = new AlertDialog.Builder(this)
                 .setTitle(existing == null ? "Add vault item" : "Edit vault item")
-                .setView(wrap(form))
-                .setPositiveButton("Save", null)
-                .setNegativeButton("Cancel", null)
+                .setView(editorRoot)
                 .create();
-        d.setOnShowListener(x -> d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-            if (title.getText().toString().trim().isEmpty()) { title.setError("Title is required"); return; }
+
+        cancelEditor.setOnClickListener(v -> d.dismiss());
+
+        saveEditor.setOnClickListener(v -> {
+            if (title.getText().toString().trim().isEmpty()) {
+                title.setError("Title is required");
+                title.requestFocus();
+                return;
+            }
+
             item.title = title.getText().toString().trim();
             item.category = selectedCategoryName(category, "Other");
             item.username = username.getText().toString();
@@ -1463,8 +1504,10 @@ public class MainActivity extends Activity {
             item.website = website.getText().toString();
             item.websiteUrl = websiteUrl.getText().toString();
             item.notes = notes.getText().toString();
+
             captureCustomValues(customEditors, customDraft);
             item.customFields = new LinkedHashMap<>(customDraft);
+
             try {
                 database.save(item, sessionKey);
                 d.dismiss();
@@ -1472,7 +1515,8 @@ public class MainActivity extends Activity {
             } catch (Exception e) {
                 toast("Could not save encrypted item.");
             }
-        }));
+        });
+
         ScreenSecurityManager.protect(d);
         d.show();
     }

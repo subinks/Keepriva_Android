@@ -4,9 +4,11 @@ import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.action.ViewActions.click;
 import static androidx.test.espresso.action.ViewActions.closeSoftKeyboard;
 import static androidx.test.espresso.action.ViewActions.replaceText;
+import static androidx.test.espresso.action.ViewActions.scrollTo;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withHint;
+import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
 import android.content.Context;
@@ -89,7 +91,7 @@ public class KeeprivaUiSmokeTest {
     @Test
     public void lock_returnsToUnlockScreen() {
         createTestVault();
-        onView(withText("Lock")).perform(click());
+        onView(withText("Lock")).perform(scrollTo(), click());
         onView(withText("Offline encrypted password manager"))
                 .check(matches(isDisplayed()));
         onView(withHint("Master password")).check(matches(isDisplayed()));
@@ -99,7 +101,7 @@ public class KeeprivaUiSmokeTest {
     @Test
     public void wrongMasterPassword_doesNotUnlock() {
         createTestVault();
-        onView(withText("Lock")).perform(click());
+        onView(withText("Lock")).perform(scrollTo(), click());
 
         onView(withHint("Master password"))
                 .perform(replaceText("WrongPassword123!"), closeSoftKeyboard());
@@ -111,16 +113,21 @@ public class KeeprivaUiSmokeTest {
     @Test
     public void addItem_requiresTitle() {
         createTestVault();
-        onView(withText("+")).perform(click());
-        onView(withText("Add vault item")).check(matches(isDisplayed()));
+
+        onView(withContentDescription("Add item")).perform(click());
+
+        // Verify the add form itself rather than relying on an AlertDialog title.
+        onView(withHint("Title")).check(matches(isDisplayed()));
+
+        // Saving without a title must keep the edit form open.
         onView(withText("Save")).perform(click());
-        onView(withText("Add vault item")).check(matches(isDisplayed()));
+        onView(withHint("Title")).check(matches(isDisplayed()));
     }
 
     @Test
     public void importDialog_showsBothActions() {
         createTestVault();
-        onView(withText("Import")).perform(click());
+        onView(withText("Import")).perform(scrollTo(), click());
 
         onView(withText("Download JSON import template")).check(matches(isDisplayed()));
         onView(withText("Import filled JSON template")).check(matches(isDisplayed()));
@@ -129,7 +136,7 @@ public class KeeprivaUiSmokeTest {
     @Test
     public void backupDialog_showsBothActions() {
         createTestVault();
-        onView(withText("Backup")).perform(click());
+        onView(withText("Backup")).perform(scrollTo(), click());
 
         onView(withText("Create encrypted .pvault backup")).check(matches(isDisplayed()));
         onView(withText("Restore encrypted .pvault backup")).check(matches(isDisplayed()));
@@ -138,7 +145,7 @@ public class KeeprivaUiSmokeTest {
     @Test
     public void exportWithNoItems_showsHomeAndDoesNotCrash() {
         createTestVault();
-        onView(withText("Export")).perform(click());
+        onView(withText("Export")).perform(scrollTo(), click());
 
         // Empty-vault export is handled with a Toast; verify activity remains alive.
         onView(withText("Keepriva")).check(matches(isDisplayed()));
@@ -147,7 +154,7 @@ public class KeeprivaUiSmokeTest {
     @Test
     public void preferencesDialog_isReachable() {
         createTestVault();
-        onView(withText("Preferences")).perform(click());
+        onView(withText("Preferences")).perform(scrollTo(), click());
 
         onView(withText("Preferences")).check(matches(isDisplayed()));
         onView(withText("Enable editing category nesting depth")).check(matches(isDisplayed()));
@@ -156,9 +163,10 @@ public class KeeprivaUiSmokeTest {
     @Test
     public void categoriesDialog_isReachable() {
         createTestVault();
-        onView(withText("Categories")).perform(click());
+        onView(withText("Categories")).perform(scrollTo(), click());
 
         onView(withText("Categories")).check(matches(isDisplayed()));
         onView(withText("+ New custom category / sub-category")).check(matches(isDisplayed()));
     }
 }
+

@@ -1125,6 +1125,62 @@ public class MainActivity extends Activity {
                 : "Password copied. It will be cleared in " + (timeout / 1000L) + " seconds.");
     }
 
+    private void lockVault() {
+        if (clipboardSecurity != null) clipboardSecurity.clearSensitiveClipboardNow();
+        clearSessionState();
+        explicitlyLocked = true;
+        backgroundAt = 0;
+        showUnlockScreen();
+    }
+    private void clearSessionState() {
+        sessionKey = null;
+        allItems.clear();
+        customCategories.clear();
+        clearPendingExportData();
+        clearPendingTemplateData();
+        clearPendingBackupData();
+        systemPickerInProgress = false;
+        systemPickerStartedAt = 0L;
+    }
+    private int directChildCount(String parentName) {
+        int count = 0;
+        for (CustomCategory category : customCategories) {
+            if (safe(category.parentName).equals(parentName)) count++;
+        }
+        return count;
+    }
+    private CategoryOption[] parentOptionsFor(CustomCategory existing) {
+        List<CategoryOption> options = new ArrayList<>();
+        options.add(new CategoryOption("", "Top level"));
+
+        int maxDepth = getMaxCategoryDepth();
+
+        for (String builtIn : BUILT_IN_CATEGORIES) {
+            if (1 < maxDepth) {
+                options.add(new CategoryOption(builtIn, builtIn));
+            }
+        }
+
+        List<CustomCategory> sorted = new ArrayList<>(customCategories);
+        sorted.sort((a, b) ->
+                categoryPath(a.name).compareToIgnoreCase(categoryPath(b.name)));
+
+        for (CustomCategory candidate : sorted) {
+            if (existing != null) {
+                if (candidate.id == existing.id) continue;
+                if (isDescendantOf(candidate.name, existing.name)) continue;
+                if (!moveFitsDepth(existing.name, candidate.name)) continue;
+            } else if (categoryDepth(candidate.name) + 1 > maxDepth) {
+                continue;
+            }
+
+            options.add(new CategoryOption(
+                    candidate.name,
+                    categoryPath(candidate.name)));
+        }
+
+        return options.toArray(new CategoryOption[0]);
+    }
     private void showVaultScreen() {
         if (sessionKey == null) { showUnlockScreen(); return; }
 

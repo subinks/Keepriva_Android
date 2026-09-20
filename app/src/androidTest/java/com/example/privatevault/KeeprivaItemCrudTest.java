@@ -161,6 +161,53 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
     }
 
     @Test
+    public void categoryNavigation_filtersVisibleEntries_andUpdatesHeading() {
+        createTestVault();
+        createBasicItem("Login Only Item");
+
+        // A newly-created basic item uses the first built-in category: Login.
+        selectHomeCategory("Website");
+
+        onView(withText("Entries — Website"))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
+
+        onView(withText("No matching items."))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
+
+        onView(withText("Login Only Item"))
+                .check(doesNotExist());
+
+        // Navigate back to Login and verify the item becomes visible again.
+        selectHomeCategory("Login");
+
+        onView(withText("Entries — Login"))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
+
+        onView(withText("Login Only Item"))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
+    }
+
+    @Test
+    public void search_filtersOutNonMatchingEntries() {
+        createTestVault();
+        createBasicItem("Alpha Credential");
+        createBasicItem("Beta Credential");
+
+        onView(withHint("Search title, username, phone, website or notes"))
+                .perform(scrollTo(), replaceText("Alpha"), closeSoftKeyboard());
+
+        onView(withText("Alpha Credential"))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
+
+        onView(withText("Beta Credential"))
+                .check(doesNotExist());
+    }
+    @Test
     public void deleteCancel_keepsItem() {
         createTestVault();
         createBasicItem("Keep Me");

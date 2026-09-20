@@ -166,6 +166,27 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
     }
 
     @Test
+    public void categoryTree_countReflectsStoredEntryAfterHomeRebuild() {
+        createTestVault();
+        createBasicItem("Counted Login Item");
+
+        /*
+         * Rebuild the home screen through the real lock/unlock flow.
+         * Patch 18 loads entries before constructing the category tree, so the
+         * Login row must now be created with the persisted item count.
+         */
+        lockVault();
+        unlockWithTestPassword();
+
+        onView(withContentDescription("Open category Login"))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
+
+        onView(withText("Category • 1 entry"))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
+    }
+    @Test
     public void customCategoryAppearsInHomeFilter() {
         createTestVault();
         createFolderCategory("Filter Category");

@@ -116,12 +116,17 @@ public class KeeprivaUiSmokeTest {
 
         onView(withContentDescription("Add item")).perform(click());
 
-        // Verify the add form itself rather than relying on an AlertDialog title.
-        onView(withHint("Title")).check(matches(isDisplayed()));
+        // The Add Item dialog is open if its Save/Cancel actions are visible.
+        // Do not depend on the EditText hint because Android/Espresso may expose
+        // programmatically-created field hints differently across API levels.
+        onView(withText("Save")).check(matches(isDisplayed()));
+        onView(withText("Cancel")).check(matches(isDisplayed()));
 
-        // Saving without a title must keep the edit form open.
+        // Saving without a title must be rejected and the dialog must remain open.
         onView(withText("Save")).perform(click());
-        onView(withHint("Title")).check(matches(isDisplayed()));
+
+        onView(withText("Save")).check(matches(isDisplayed()));
+        onView(withText("Cancel")).check(matches(isDisplayed()));
     }
 
     @Test
@@ -169,4 +174,5 @@ public class KeeprivaUiSmokeTest {
         onView(withText("+ New custom category / sub-category")).check(matches(isDisplayed()));
     }
 }
+
 

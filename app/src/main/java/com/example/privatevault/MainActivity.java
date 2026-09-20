@@ -1136,115 +1136,181 @@ public class MainActivity extends Activity {
         }
 
         LinearLayout outer = baseVertical(14);
-        outer.setPadding(dp(14), dp(14), dp(14), dp(24));
+        outer.setPadding(dp(14), dp(14), dp(14), dp(28));
 
+        // Compact identity header.
         LinearLayout header = new LinearLayout(this);
-        header.setOrientation(LinearLayout.VERTICAL);
-        header.setPadding(dp(18), dp(16), dp(18), dp(16));
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setPadding(dp(16), dp(14), dp(14), dp(14));
         header.setBackground(UiStyle.rounded(this, R.color.keepriva_primary_dark, 16));
-
-        LinearLayout top = new LinearLayout(this);
-        top.setOrientation(LinearLayout.HORIZONTAL);
-        top.setGravity(Gravity.CENTER_VERTICAL);
 
         LinearLayout identity = new LinearLayout(this);
         identity.setOrientation(LinearLayout.VERTICAL);
 
-        TextView title = new TextView(this);
-        title.setText("Keepriva");
-        title.setTextColor(getColor(android.R.color.white));
-        title.setTextSize(25);
-        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        identity.addView(title);
+        TextView appTitle = new TextView(this);
+        appTitle.setText("Keepriva");
+        appTitle.setTextColor(getColor(android.R.color.white));
+        appTitle.setTextSize(24);
+        appTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        identity.addView(appTitle);
 
-        TextView subtitle = new TextView(this);
-        subtitle.setText("Private vault • Offline by design");
-        subtitle.setTextColor(Color.argb(205,255,255,255));
-        subtitle.setTextSize(13);
-        identity.addView(subtitle);
+        TextView appSubtitle = new TextView(this);
+        appSubtitle.setText("Private vault • Offline by design");
+        appSubtitle.setTextColor(Color.argb(205, 255, 255, 255));
+        appSubtitle.setTextSize(13);
+        identity.addView(appSubtitle);
 
-        top.addView(identity, new LinearLayout.LayoutParams(
+        header.addView(identity, new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
 
         Button lock = button("Lock");
         lock.setContentDescription("Lock vault");
         UiStyle.styleCompactButton(lock);
         lock.setOnClickListener(v -> lockVault());
-        top.addView(lock);
-
-        header.addView(top, matchWidth());
-
-        Button add = primaryButton("+  Add item");
-        add.setContentDescription("Add item");
-        add.setOnClickListener(v -> showEditDialog(null));
-        LinearLayout.LayoutParams addParams = matchWidth();
-        addParams.topMargin = dp(14);
-        header.addView(add, addParams);
+        header.addView(lock);
 
         outer.addView(header, matchWidth());
 
-        LinearLayout browse = UiStyle.verticalCard(this, 14);
-        browse.addView(UiStyle.sectionTitle(this, "Your vault"));
-        browse.addView(UiStyle.sectionCaption(this, "Search entries or narrow the list by category."));
-
+        // Search sits above the category tree.
         searchBox = field("Search title, username, phone, website or notes", "");
         searchBox.setSingleLine(true);
-        browse.addView(searchBox, matchWidth());
+        LinearLayout.LayoutParams searchParams = matchWidth();
+        searchParams.topMargin = dp(12);
+        outer.addView(searchBox, searchParams);
 
-        TextView categoryLabel = UiStyle.sectionCaption(this, "Category");
-        categoryLabel.setPadding(0, dp(10), 0, dp(4));
-        browse.addView(categoryLabel);
+        // Category tree: this is now the primary navigation instead of a row/grid
+        // of top-level buttons. Parent and child categories are shown one below
+        // another with indentation and entry counts.
+        LinearLayout categoryCard = UiStyle.verticalCard(this, 10);
 
-        categoryFilter = new Spinner(this);
-        categoryFilter.setAdapter(new ArrayAdapter<>(
-                this, android.R.layout.simple_spinner_dropdown_item, getFilterCategories()));
-        UiStyle.styleSpinner(categoryFilter);
-        browse.addView(categoryFilter, matchWidth());
+        LinearLayout categoryHeader = new LinearLayout(this);
+        categoryHeader.setOrientation(LinearLayout.HORIZONTAL);
+        categoryHeader.setGravity(Gravity.CENTER_VERTICAL);
 
-        LinearLayout.LayoutParams browseParams = matchWidth();
-        browseParams.topMargin = dp(12);
-        outer.addView(browse, browseParams);
+        LinearLayout categoryHeaderText = new LinearLayout(this);
+        categoryHeaderText.setOrientation(LinearLayout.VERTICAL);
+        categoryHeaderText.addView(UiStyle.sectionTitle(this, "Categories"));
+        categoryHeaderText.addView(UiStyle.sectionCaption(
+                this, "Browse your vault by category and subcategory."));
 
-        LinearLayout tools = UiStyle.verticalCard(this, 14);
-        tools.addView(UiStyle.sectionTitle(this, "Manage"));
-        tools.addView(UiStyle.sectionCaption(
-                this, "Organize, transfer, back up and secure your vault."));
+        categoryHeader.addView(categoryHeaderText, new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
 
-        Button categories = button("Categories");
-        categories.setOnClickListener(v -> showCustomCategoriesDialog());
+        Button manageCategories = button("Manage");
+        UiStyle.styleCompactButton(manageCategories);
+        manageCategories.setOnClickListener(v -> showCustomCategoriesDialog());
+        categoryHeader.addView(manageCategories);
 
-        Button importButton = button("Import");
-        importButton.setOnClickListener(v -> showImportDialog());
+        categoryCard.addView(categoryHeader, matchWidth());
 
-        Button exportButton = button("Export");
-        exportButton.setOnClickListener(v -> exportSelectedCategory());
+        LinearLayout categoryTree = new LinearLayout(this);
+        categoryTree.setOrientation(LinearLayout.VERTICAL);
 
-        Button backup = button("Backup");
-        backup.setOnClickListener(v -> showBackupRestoreDialog());
+        addHomeCategoryTreeRow(categoryTree, "All", "All categories", 0, countItemsForCategory("All"), true);
 
-        Button preferences = button("Preferences");
-        preferences.setOnClickListener(v -> showPreferencesDialog());
+        Set<String> rendered = new HashSet<>();
 
-        Button security = button("Security");
-        security.setContentDescription("Security settings");
-        security.setOnClickListener(
-                v -> requestMasterPasswordReauth("Security settings", this::showSecuritySettings));
+        for (String builtIn : BUILT_IN_CATEGORIES) {
+            addHomeCategoryTreeRow(
+                    categoryTree,
+                    builtIn,
+                    builtIn,
+                    0,
+                    countItemsForCategory(builtIn),
+                    false
+            );
+            addHomeCustomCategoryChildren(categoryTree, builtIn, 1, rendered);
+        }
 
-        tools.addView(twoColumnActionRow(categories, importButton), matchWidth());
-        tools.addView(twoColumnActionRow(exportButton, backup), matchWidth());
-        tools.addView(twoColumnActionRow(preferences, security), matchWidth());
+        List<CustomCategory> roots = new ArrayList<>();
+        for (CustomCategory category : customCategories) {
+            if (safe(category.parentName).trim().isEmpty()) roots.add(category);
+        }
+        roots.sort((a, b) -> safe(a.name).compareToIgnoreCase(safe(b.name)));
+
+        for (CustomCategory root : roots) {
+            String key = safe(root.name).toLowerCase(Locale.ROOT);
+            if (!rendered.add(key)) continue;
+            addHomeCategoryTreeRow(
+                    categoryTree,
+                    root.name,
+                    root.name,
+                    0,
+                    countItemsForCategory(root.name),
+                    false
+            );
+            addHomeCustomCategoryChildren(categoryTree, root.name, 1, rendered);
+        }
+
+        categoryCard.addView(categoryTree, matchWidth());
+
+        LinearLayout.LayoutParams categoryParams = matchWidth();
+        categoryParams.topMargin = dp(12);
+        outer.addView(categoryCard, categoryParams);
+
+        // Secondary management actions are shown as a calm vertical list instead
+        // of a horizontal row or 2-column button grid.
+        LinearLayout toolsCard = UiStyle.verticalCard(this, 10);
+        toolsCard.addView(UiStyle.sectionTitle(this, "Vault tools"));
+        toolsCard.addView(UiStyle.sectionCaption(
+                this, "Transfer, back up, configure and secure Keepriva."));
+
+        toolsCard.addView(homeToolRow(
+                "Import",
+                "Bulk import credentials from Keepriva JSON",
+                v -> showImportDialog()), matchWidth());
+
+        toolsCard.addView(homeToolRow(
+                "Export",
+                "Export the currently selected category",
+                v -> exportSelectedCategory()), matchWidth());
+
+        toolsCard.addView(homeToolRow(
+                "Backup & Restore",
+                "Encrypted .pvault backup and recovery",
+                v -> showBackupRestoreDialog()), matchWidth());
+
+        toolsCard.addView(homeToolRow(
+                "Preferences",
+                "Category nesting and app preferences",
+                v -> showPreferencesDialog()), matchWidth());
+
+        toolsCard.addView(homeToolRow(
+                "Security",
+                "Master password, biometrics and lock settings",
+                v -> requestMasterPasswordReauth(
+                        "Security settings",
+                        this::showSecuritySettings)), matchWidth());
 
         LinearLayout.LayoutParams toolsParams = matchWidth();
         toolsParams.topMargin = dp(12);
-        outer.addView(tools, toolsParams);
+        outer.addView(toolsCard, toolsParams);
 
-        TextView entries = UiStyle.sectionTitle(this, "Entries");
-        entries.setPadding(dp(2), dp(18), 0, dp(6));
-        outer.addView(entries, matchWidth());
+        Button addItem = primaryButton("+  Add item");
+        addItem.setContentDescription("Add item");
+        addItem.setOnClickListener(v -> showEditDialog(null));
+        LinearLayout.LayoutParams addParams = matchWidth();
+        addParams.topMargin = dp(12);
+        outer.addView(addItem, addParams);
+
+        TextView entriesHeading = UiStyle.sectionTitle(this, "Entries");
+        entriesHeading.setPadding(dp(2), dp(18), 0, dp(6));
+        outer.addView(entriesHeading, matchWidth());
 
         listContainer = new LinearLayout(this);
         listContainer.setOrientation(LinearLayout.VERTICAL);
         outer.addView(listContainer, matchWidth());
+
+        // Hidden logical spinner retained only as state-holder for existing filtering
+        // and export code. Users navigate through the visible tree rows above.
+        categoryFilter = new Spinner(this);
+        categoryFilter.setAdapter(new ArrayAdapter<>(
+                this,
+                android.R.layout.simple_spinner_dropdown_item,
+                getFilterCategories()));
+        categoryFilter.setVisibility(View.GONE);
+        outer.addView(categoryFilter, new LinearLayout.LayoutParams(1, 1));
 
         searchBox.addTextChangedListener(new SimpleTextWatcher(this::applyFilter));
         categoryFilter.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
@@ -1256,24 +1322,189 @@ public class MainActivity extends Activity {
         loadItems();
     }
 
-    private LinearLayout twoColumnActionRow(Button left, Button right) {
+    private View homeToolRow(String title, String description, View.OnClickListener action) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(10), dp(11), dp(8), dp(11));
+        row.setBackground(UiStyle.outlined(
+                this, R.color.keepriva_surface, R.color.keepriva_outline, 12));
+        row.setClickable(true);
+        row.setFocusable(true);
+        row.setOnClickListener(action);
 
-        LinearLayout.LayoutParams leftParams = new LinearLayout.LayoutParams(
-                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-        leftParams.rightMargin = dp(5);
+        TextView icon = new TextView(this);
+        icon.setText("•");
+        icon.setTextSize(26);
+        icon.setGravity(Gravity.CENTER);
+        icon.setTextColor(getColor(R.color.keepriva_primary));
+        icon.setBackground(UiStyle.rounded(this, R.color.keepriva_surface_soft, 18));
+        LinearLayout.LayoutParams iconParams =
+                new LinearLayout.LayoutParams(dp(38), dp(38));
+        iconParams.rightMargin = dp(12);
+        row.addView(icon, iconParams);
 
-        LinearLayout.LayoutParams rightParams = new LinearLayout.LayoutParams(
-                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-        rightParams.leftMargin = dp(5);
+        LinearLayout text = new LinearLayout(this);
+        text.setOrientation(LinearLayout.VERTICAL);
 
-        row.addView(left, leftParams);
-        row.addView(right, rightParams);
+        TextView titleView = new TextView(this);
+        titleView.setText(title);
+        titleView.setTextSize(16);
+        titleView.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        titleView.setTextColor(getColor(R.color.keepriva_text_primary));
+        text.addView(titleView);
 
-        row.setPadding(0, dp(8), 0, 0);
+        TextView descriptionView = new TextView(this);
+        descriptionView.setText(description);
+        descriptionView.setTextSize(13);
+        descriptionView.setTextColor(getColor(R.color.keepriva_text_secondary));
+        text.addView(descriptionView);
+
+        row.addView(text, new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+
+        TextView arrow = new TextView(this);
+        arrow.setText("›");
+        arrow.setTextSize(28);
+        arrow.setTextColor(getColor(R.color.keepriva_text_secondary));
+        arrow.setGravity(Gravity.CENTER);
+        row.addView(arrow, new LinearLayout.LayoutParams(dp(32), dp(40)));
+
+        LinearLayout.LayoutParams lp = matchWidth();
+        lp.setMargins(0, dp(5), 0, dp(5));
+        row.setLayoutParams(lp);
+
         return row;
+    }
+
+    private void addHomeCustomCategoryChildren(
+            LinearLayout container,
+            String parentName,
+            int depth,
+            Set<String> rendered) {
+
+        List<CustomCategory> children = new ArrayList<>();
+        for (CustomCategory category : customCategories) {
+            if (safe(category.parentName).equalsIgnoreCase(safe(parentName))) {
+                children.add(category);
+            }
+        }
+
+        children.sort((a, b) -> safe(a.name).compareToIgnoreCase(safe(b.name)));
+
+        for (CustomCategory child : children) {
+            String key = safe(child.name).toLowerCase(Locale.ROOT);
+            if (!rendered.add(key)) continue;
+
+            addHomeCategoryTreeRow(
+                    container,
+                    child.name,
+                    child.name,
+                    depth,
+                    countItemsForCategory(child.name),
+                    false
+            );
+
+            addHomeCustomCategoryChildren(container, child.name, depth + 1, rendered);
+        }
+    }
+
+    private void addHomeCategoryTreeRow(
+            LinearLayout container,
+            String categoryName,
+            String label,
+            int depth,
+            int itemCount,
+            boolean allCategories) {
+
+        LinearLayout indent = new LinearLayout(this);
+        indent.setOrientation(LinearLayout.VERTICAL);
+        indent.setPadding(dp(Math.min(depth, HARD_MAX_CATEGORY_DEPTH) * 20), 0, 0, 0);
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(8), dp(10), dp(6), dp(10));
+        row.setBackground(UiStyle.outlined(
+                this, R.color.keepriva_surface, R.color.keepriva_outline, 12));
+        row.setClickable(true);
+        row.setFocusable(true);
+        row.setContentDescription("Open category " + label);
+
+        TextView icon = new TextView(this);
+        icon.setText(depth == 0 ? "▣" : "└");
+        icon.setTextSize(depth == 0 ? 20 : 18);
+        icon.setGravity(Gravity.CENTER);
+        icon.setTextColor(getColor(R.color.keepriva_primary_dark));
+        icon.setBackground(UiStyle.rounded(this, R.color.keepriva_surface_soft, 18));
+
+        LinearLayout.LayoutParams iconParams =
+                new LinearLayout.LayoutParams(dp(38), dp(38));
+        iconParams.rightMargin = dp(12);
+        row.addView(icon, iconParams);
+
+        LinearLayout text = new LinearLayout(this);
+        text.setOrientation(LinearLayout.VERTICAL);
+
+        TextView nameView = new TextView(this);
+        nameView.setText(label);
+        nameView.setTextSize(depth == 0 ? 16 : 15);
+        nameView.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        nameView.setTextColor(getColor(R.color.keepriva_text_primary));
+        text.addView(nameView);
+
+        TextView countView = new TextView(this);
+        countView.setText((depth == 0 ? "Category" : "Subcategory")
+                + " • " + itemCount + (itemCount == 1 ? " entry" : " entries"));
+        countView.setTextSize(13);
+        countView.setTextColor(getColor(R.color.keepriva_text_secondary));
+        text.addView(countView);
+
+        row.addView(text, new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+
+        TextView arrow = new TextView(this);
+        arrow.setText("›");
+        arrow.setTextSize(28);
+        arrow.setTextColor(getColor(R.color.keepriva_text_secondary));
+        arrow.setGravity(Gravity.CENTER);
+        row.addView(arrow, new LinearLayout.LayoutParams(dp(32), dp(40)));
+
+        row.setOnClickListener(v -> {
+            selectHomeCategoryByName(allCategories ? "All" : categoryName);
+            applyFilter();
+        });
+
+        indent.addView(row, matchWidth());
+
+        LinearLayout.LayoutParams lp = matchWidth();
+        lp.setMargins(0, dp(4), 0, dp(4));
+        container.addView(indent, lp);
+    }
+
+    private int countItemsForCategory(String categoryName) {
+        if ("All".equals(categoryName)) return allItems == null ? 0 : allItems.size();
+
+        int count = 0;
+        if (allItems != null) {
+            for (VaultItem item : allItems) {
+                if (isDescendantOf(item.category, categoryName)) count++;
+            }
+        }
+        return count;
+    }
+
+    private void selectHomeCategoryByName(String categoryName) {
+        if (categoryFilter == null || categoryFilter.getAdapter() == null) return;
+
+        for (int i = 0; i < categoryFilter.getAdapter().getCount(); i++) {
+            Object option = categoryFilter.getAdapter().getItem(i);
+            if (option instanceof CategoryOption
+                    && safe(((CategoryOption) option).name).equalsIgnoreCase(safe(categoryName))) {
+                categoryFilter.setSelection(i);
+                return;
+            }
+        }
     }
     private void loadItems() {
         try {

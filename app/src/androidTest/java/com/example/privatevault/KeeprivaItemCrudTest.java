@@ -116,7 +116,7 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
         createBasicItem("Searchable Credential");
 
         onView(withHint("Search title, username, phone, website or notes"))
-                .perform(replaceText("Searchable"), closeSoftKeyboard());
+                .perform(scrollTo(), replaceText("Searchable"), closeSoftKeyboard());
 
         onView(withText("Searchable Credential")).perform(scrollTo()).check(matches(isDisplayed()));
     }
@@ -127,7 +127,7 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
         createBasicItem("Existing Item");
 
         onView(withHint("Search title, username, phone, website or notes"))
-                .perform(replaceText("does-not-exist"), closeSoftKeyboard());
+                .perform(scrollTo(), replaceText("does-not-exist"), closeSoftKeyboard());
 
         onView(withText("No matching items.")).perform(scrollTo()).check(matches(isDisplayed()));
     }
@@ -151,8 +151,22 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
         createBasicItem("Undo Me");
 
         onView(withText("Undo Me")).perform(click());
-        onView(withText("Delete")).perform(click());
-        onView(withText("Delete")).perform(click());
+
+        onView(withText("Undo Me"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
+
+        onView(withText("Delete"))
+                .inRoot(isDialog())
+                .perform(click());
+
+        onView(withText("Delete item?"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
+
+        onView(withText("Delete"))
+                .inRoot(isDialog())
+                .perform(click());
 
         onView(withText("Item deleted")).check(matches(isDisplayed()));
         onView(withText("Undo")).perform(click());

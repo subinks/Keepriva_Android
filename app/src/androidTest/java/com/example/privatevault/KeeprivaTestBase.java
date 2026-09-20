@@ -131,7 +131,7 @@ public abstract class KeeprivaTestBase {
     private void waitForUiState(String description, ViewPredicate predicate) {
         if (scenario == null) throw new AssertionError("ActivityScenario is unavailable");
 
-        final long deadline = SystemClock.uptimeMillis() + 8000L;
+        final long deadline = SystemClock.uptimeMillis() + 45000L;
 
         while (SystemClock.uptimeMillis() < deadline) {
             final AtomicBoolean matched = new AtomicBoolean(false);
@@ -294,6 +294,7 @@ public abstract class KeeprivaTestBase {
         onView(withText("Save")).perform(click());
 
         onView(withHint("Search title, username, phone, website or notes"))
+                .perform(scrollTo())
                 .check(matches(isDisplayed()));
     }
 

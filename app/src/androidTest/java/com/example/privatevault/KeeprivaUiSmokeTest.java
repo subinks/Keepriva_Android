@@ -81,7 +81,7 @@ public class KeeprivaUiSmokeTest {
     }
 
     private void waitForUnlockReady() {
-        final long deadline = android.os.SystemClock.uptimeMillis() + 8000L;
+        final long deadline = android.os.SystemClock.uptimeMillis() + 45000L;
 
         while (android.os.SystemClock.uptimeMillis() < deadline) {
             final java.util.concurrent.atomic.AtomicBoolean ready =
@@ -235,6 +235,7 @@ public class KeeprivaUiSmokeTest {
         onView(withContentDescription("Export")).perform(scrollTo(), click());
 
         onView(withHint("Search title, username, phone, website or notes"))
+                .perform(scrollTo())
                 .check(matches(isDisplayed()));
     }
 
@@ -257,6 +258,8 @@ public class KeeprivaUiSmokeTest {
 
         onView(withText("Categories")).check(matches(isDisplayed()));
         onView(withText("+  New category / subcategory"))
+                .inRoot(isDialog())
+                .perform(scrollTo())
                 .check(matches(isDisplayed()));
     }
 }

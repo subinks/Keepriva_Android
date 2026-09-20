@@ -11,6 +11,7 @@ import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;
 import static androidx.test.espresso.matcher.ViewMatchers.withHint;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
+import static androidx.test.espresso.matcher.RootMatchers.isDialog;
 import static org.hamcrest.Matchers.hasToString;
 import static org.hamcrest.Matchers.is;
 
@@ -32,9 +33,18 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
         createTestVault();
         onView(withContentDescription("Manage categories")).perform(scrollTo(), click());
 
-        onView(withText("Login")).check(matches(isDisplayed()));
-        onView(withText("Banking")).check(matches(isDisplayed()));
-        onView(withText("Secure Note")).check(matches(isDisplayed()));
+        onView(withText("Login"))
+                .inRoot(isDialog())
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
+        onView(withText("Banking"))
+                .inRoot(isDialog())
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
+        onView(withText("Secure Note"))
+                .inRoot(isDialog())
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
     }
 
     @Test
@@ -43,7 +53,10 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
         createFolderCategory("Folder Only");
 
         onView(withContentDescription("Manage categories")).perform(scrollTo(), click());
-        onView(withText("Folder Only  •  0 fields")).check(matches(isDisplayed()));
+        onView(withText("Folder Only  •  0 fields"))
+                .inRoot(isDialog())
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
     }
 
     @Test
@@ -94,7 +107,10 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
         onView(withText("Save")).perform(click());
 
         onView(withContentDescription("Manage categories")).perform(scrollTo(), click());
-        onView(withText("Membership  •  2 fields")).check(matches(isDisplayed()));
+        onView(withText("Membership  •  2 fields"))
+                .inRoot(isDialog())
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
     }
 
     @Test

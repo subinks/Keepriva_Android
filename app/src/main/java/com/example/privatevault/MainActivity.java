@@ -445,8 +445,7 @@ public class MainActivity extends Activity {
                         public void onAuthenticationError(int errorCode, CharSequence errString) {
                             super.onAuthenticationError(errorCode, errString);
                             if (errorCode != BiometricPrompt.BIOMETRIC_ERROR_CANCELED
-                                    && errorCode != BiometricPrompt.BIOMETRIC_ERROR_USER_CANCELED
-                                    && errorCode != BiometricPrompt.BIOMETRIC_ERROR_NEGATIVE_BUTTON) {
+                                    && errorCode != BiometricPrompt.BIOMETRIC_ERROR_USER_CANCELED) {
                                 toast("Biometric authentication is unavailable. Use the master password.");
                             }
                         }
@@ -504,8 +503,7 @@ public class MainActivity extends Activity {
                         public void onAuthenticationError(int errorCode, CharSequence errString) {
                             super.onAuthenticationError(errorCode, errString);
                             if (errorCode != BiometricPrompt.BIOMETRIC_ERROR_CANCELED
-                                    && errorCode != BiometricPrompt.BIOMETRIC_ERROR_USER_CANCELED
-                                    && errorCode != BiometricPrompt.BIOMETRIC_ERROR_NEGATIVE_BUTTON) {
+                                    && errorCode != BiometricPrompt.BIOMETRIC_ERROR_USER_CANCELED) {
                                 toast("Biometric unlock failed. Use the master password.");
                             }
                         }
@@ -2222,3 +2220,4 @@ public class MainActivity extends Activity {
     private void toast(String s) { Toast.makeText(this, s, Toast.LENGTH_LONG).show(); }
     private static String safe(String s) { return s == null ? "" : s; }
 }
+

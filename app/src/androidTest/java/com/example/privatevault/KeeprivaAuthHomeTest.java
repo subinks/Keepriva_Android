@@ -108,6 +108,7 @@ public class KeeprivaAuthHomeTest extends KeeprivaTestBase {
                 .perform(replaceText("WrongPassword123!"), closeSoftKeyboard());
         onView(withText("Unlock")).perform(click());
 
+        waitForUnlockReady();
         onView(withText("Unlock")).check(matches(isDisplayed()));
     }
 
@@ -121,7 +122,7 @@ public class KeeprivaAuthHomeTest extends KeeprivaTestBase {
     @Test
     public void emptyVault_showsEmptyState() {
         createTestVault();
-        onView(withText("No items yet. Tap + to add your first credential or note."))
+        onView(withText("No items yet. Tap Add item to create your first credential or note."))
                 .check(matches(isDisplayed()));
     }
 }

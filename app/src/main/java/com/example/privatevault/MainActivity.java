@@ -25,6 +25,7 @@ import android.widget.EditText;
 import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -43,6 +44,8 @@ import java.util.Set;
 import java.util.Map;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
@@ -104,6 +107,8 @@ public class MainActivity extends Activity {
     private long backgroundAt = 0L;
     private boolean explicitlyLocked = true;
     private ClipboardSecurityManager clipboardSecurity;
+    // PBKDF2 deliberately uses a high work factor; never derive on the UI thread.
+    private final ExecutorService unlockExecutor = Executors.newSingleThreadExecutor();
     private boolean systemPickerInProgress = false;
     private long systemPickerStartedAt = 0L;
     private boolean screenOffReceiverRegistered = false;
@@ -167,6 +172,7 @@ public class MainActivity extends Activity {
             try { unregisterReceiver(screenOffReceiver); } catch (Exception ignored) { }
             screenOffReceiverRegistered = false;
         }
+        unlockExecutor.shutdownNow();
         clearSessionState();
         super.onDestroy();
     }
@@ -237,27 +243,25 @@ public class MainActivity extends Activity {
         explicitlyLocked = true;
 
         final int white = Color.WHITE;
-        final int mutedWhite = Color.argb(210, 255, 255, 255);
+        final int mutedWhite = Color.argb(215, 255, 255, 255);
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setGravity(Gravity.CENTER_HORIZONTAL);
-        root.setPadding(dp(28), dp(42), dp(28), dp(28));
+        root.setPadding(dp(26), dp(34), dp(26), dp(30));
         root.setBackgroundColor(getColor(R.color.keepriva_primary_dark));
 
-        // Keepriva shield + leaf brand mark.
         ImageView logo = new ImageView(this);
         logo.setImageResource(R.drawable.ic_keepriva_shield_leaf);
         logo.setContentDescription("Keepriva shield and leaf logo");
-        LinearLayout.LayoutParams logoParams =
-                new LinearLayout.LayoutParams(dp(104), dp(104));
-        logoParams.bottomMargin = dp(12);
+        LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(dp(88), dp(88));
+        logoParams.bottomMargin = dp(10);
         root.addView(logo, logoParams);
 
         TextView appName = new TextView(this);
         appName.setText("Keepriva");
         appName.setTextColor(white);
-        appName.setTextSize(34);
+        appName.setTextSize(32);
         appName.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         appName.setGravity(Gravity.CENTER);
         root.addView(appName, matchWidth());
@@ -265,60 +269,64 @@ public class MainActivity extends Activity {
         TextView tagline = new TextView(this);
         tagline.setText("Your secrets. Your control.");
         tagline.setTextColor(mutedWhite);
-        tagline.setTextSize(16);
+        tagline.setTextSize(15);
         tagline.setGravity(Gravity.CENTER);
-        tagline.setPadding(0, dp(4), 0, dp(24));
+        tagline.setPadding(0, dp(4), 0, dp(22));
         root.addView(tagline, matchWidth());
 
-        // Biometric-first presentation. The control remains visible even before
-        // setup, but is disabled until a biometric-wrapped vault key exists.
-        Button biometric = primaryButton(
+        LinearLayout authCard = UiStyle.verticalCard(this, 18);
+        authCard.addView(UiStyle.sectionTitle(this, "Unlock your vault"));
+        authCard.addView(UiStyle.sectionCaption(
+                this,
                 isBiometricUnlockConfigured()
-                        ? "Unlock with fingerprint / face"
-                        : "Biometric unlock not enabled");
-        biometric.setCompoundDrawablesWithIntrinsicBounds(
-                0, R.drawable.ic_keepriva_fingerprint, 0, 0);
-        biometric.setCompoundDrawablePadding(dp(8));
-        biometric.setContentDescription(
-                isBiometricUnlockConfigured()
-                        ? "Unlock Keepriva with biometrics"
-                        : "Biometric unlock is not enabled");
-        biometric.setMinHeight(dp(104));
+                        ? "Use biometrics or your master password."
+                        : "Use your master password. Biometrics can be enabled later from Security."
+        ));
 
         if (isBiometricUnlockConfigured()) {
+            Button biometric = button("Unlock with fingerprint / face");
+            biometric.setCompoundDrawablesWithIntrinsicBounds(
+                    R.drawable.ic_keepriva_fingerprint, 0, 0, 0);
+            biometric.setCompoundDrawablePadding(dp(8));
+            biometric.setContentDescription("Unlock Keepriva with biometrics");
             biometric.setOnClickListener(v -> unlockWithBiometric());
-        } else {
-            biometric.setEnabled(false);
-            biometric.setAlpha(0.62f);
+            authCard.addView(biometric, matchWidth());
+
+            TextView or = UiStyle.sectionCaption(this, "or use your master password");
+            or.setGravity(Gravity.CENTER);
+            or.setPadding(0, dp(12), 0, dp(6));
+            authCard.addView(or, matchWidth());
         }
-        root.addView(biometric, matchWidth());
-
-        TextView biometricHelp = new TextView(this);
-        biometricHelp.setText(
-                isBiometricUnlockConfigured()
-                        ? "Use the fingerprint or strong face authentication registered on this device."
-                        : "Enable biometric unlock later from Security after unlocking with your master password.");
-        biometricHelp.setTextColor(mutedWhite);
-        biometricHelp.setTextSize(13);
-        biometricHelp.setGravity(Gravity.CENTER);
-        biometricHelp.setPadding(0, dp(8), 0, dp(20));
-        root.addView(biometricHelp, matchWidth());
-
-        TextView fallbackLabel = new TextView(this);
-        fallbackLabel.setText("Use master password instead");
-        fallbackLabel.setTextColor(white);
-        fallbackLabel.setTextSize(14);
-        fallbackLabel.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        fallbackLabel.setPadding(0, dp(4), 0, dp(8));
-        root.addView(fallbackLabel, matchWidth());
 
         EditText pass = passwordField("Master password");
         pass.setContentDescription("Master password");
-        root.addView(pass, matchWidth());
+        authCard.addView(pass, matchWidth());
+
+        ProgressBar progress = new ProgressBar(this);
+        progress.setIndeterminate(true);
+        progress.setVisibility(View.GONE);
+        LinearLayout.LayoutParams progressParams = new LinearLayout.LayoutParams(dp(28), dp(28));
+        progressParams.gravity = Gravity.CENTER_HORIZONTAL;
+        progressParams.topMargin = dp(10);
+        authCard.addView(progress, progressParams);
 
         Button unlock = primaryButton("Unlock");
         unlock.setContentDescription("Unlock with master password");
-        View.OnClickListener action = v -> unlock(pass.getText().toString());
+
+        View.OnClickListener action = v -> {
+            String entered = pass.getText().toString();
+            if (entered.isEmpty()) {
+                pass.setError("Enter your master password");
+                return;
+            }
+
+            pass.setEnabled(false);
+            unlock.setEnabled(false);
+            unlock.setText("Unlocking…");
+            progress.setVisibility(View.VISIBLE);
+            unlockInBackground(entered, pass, unlock, progress);
+        };
+
         unlock.setOnClickListener(action);
         pass.setOnEditorActionListener((v, actionId, event) -> {
             action.onClick(v);
@@ -327,14 +335,16 @@ public class MainActivity extends Activity {
 
         LinearLayout.LayoutParams unlockParams = matchWidth();
         unlockParams.topMargin = dp(10);
-        root.addView(unlock, unlockParams);
+        authCard.addView(unlock, unlockParams);
+
+        root.addView(authCard, matchWidth());
 
         TextView footer = new TextView(this);
         footer.setText("Fully offline  •  Secure  •  Private");
-        footer.setTextColor(Color.argb(190, 255, 255, 255));
+        footer.setTextColor(Color.argb(195, 255, 255, 255));
         footer.setTextSize(12);
         footer.setGravity(Gravity.CENTER);
-        footer.setPadding(0, dp(28), 0, dp(4));
+        footer.setPadding(0, dp(22), 0, 0);
         root.addView(footer, matchWidth());
 
         ScrollView screen = new ScrollView(this);
@@ -343,7 +353,6 @@ public class MainActivity extends Activity {
         screen.addView(root);
         setContentView(screen);
     }
-
     private void unlock(String password) {
         try {
             SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
@@ -387,6 +396,49 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void unlockInBackground(String password, EditText pass, Button unlock, ProgressBar progress) {
+        unlockExecutor.execute(() -> {
+            SecretKey unlocked = null;
+            Exception failure = null;
+
+            try {
+                SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+                if (prefs.getInt(PREF_CRYPTO_VERSION, 0) >= CRYPTO_VERSION_2) {
+                    unlocked = unlockV2(password, prefs);
+                } else {
+                    unlocked = unlockLegacyAndMigrate(password, prefs);
+                }
+
+                // Android Keystore initialization may also be slow on first use.
+                provisionAuthenticationBoundDeviceKey();
+            } catch (Exception e) {
+                failure = e;
+            }
+
+            final SecretKey result = unlocked;
+            final Exception error = failure;
+
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
+
+                if (error == null && result != null) {
+                    sessionKey = result;
+                    explicitlyLocked = false;
+                    backgroundAt = 0;
+                    showVaultScreen();
+                    return;
+                }
+
+                sessionKey = null;
+                progress.setVisibility(View.GONE);
+                pass.setEnabled(true);
+                unlock.setEnabled(true);
+                unlock.setText("Unlock");
+                pass.requestFocus();
+                toast("Incorrect master password or vault configuration is damaged.");
+            });
+        });
+    }
     private SecretKey unlockV2(String password, SharedPreferences prefs) throws Exception {
         byte[] salt = Base64.decode(prefs.getString(PREF_MASTER_SALT, ""), Base64.NO_WRAP);
         try {
@@ -1075,70 +1127,120 @@ public class MainActivity extends Activity {
 
     private void showVaultScreen() {
         if (sessionKey == null) { showUnlockScreen(); return; }
-        try { customCategories = database.listCustomCategories(sessionKey); }
-        catch (Exception e) { toast("Could not load custom categories."); customCategories = new ArrayList<>(); }
 
-        LinearLayout outer = baseVertical(12);
+        try {
+            customCategories = database.listCustomCategories(sessionKey);
+        } catch (Exception e) {
+            toast("Could not load custom categories.");
+            customCategories = new ArrayList<>();
+        }
 
-        // Canonical Keepriva header: dark-green identity surface with a compact add action.
+        LinearLayout outer = baseVertical(14);
+        outer.setPadding(dp(14), dp(14), dp(14), dp(24));
+
         LinearLayout header = new LinearLayout(this);
-        header.setOrientation(LinearLayout.HORIZONTAL);
-        header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setPadding(dp(14), dp(8), dp(10), dp(8));
-        header.setBackground(UiStyle.rounded(this, R.color.keepriva_primary_dark, 12));
-        TextView t = title("Keepriva");
-        t.setTextColor(getColor(android.R.color.white));
-        t.setTextSize(22);
-        t.setPadding(0, dp(4), 0, dp(4));
-        header.addView(t, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
-        Button add = button("+");
+        header.setOrientation(LinearLayout.VERTICAL);
+        header.setPadding(dp(18), dp(16), dp(18), dp(16));
+        header.setBackground(UiStyle.rounded(this, R.color.keepriva_primary_dark, 16));
+
+        LinearLayout top = new LinearLayout(this);
+        top.setOrientation(LinearLayout.HORIZONTAL);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+
+        LinearLayout identity = new LinearLayout(this);
+        identity.setOrientation(LinearLayout.VERTICAL);
+
+        TextView title = new TextView(this);
+        title.setText("Keepriva");
+        title.setTextColor(getColor(android.R.color.white));
+        title.setTextSize(25);
+        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        identity.addView(title);
+
+        TextView subtitle = new TextView(this);
+        subtitle.setText("Private vault • Offline by design");
+        subtitle.setTextColor(Color.argb(205,255,255,255));
+        subtitle.setTextSize(13);
+        identity.addView(subtitle);
+
+        top.addView(identity, new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+
+        Button lock = button("Lock");
+        lock.setContentDescription("Lock vault");
+        UiStyle.styleCompactButton(lock);
+        lock.setOnClickListener(v -> lockVault());
+        top.addView(lock);
+
+        header.addView(top, matchWidth());
+
+        Button add = primaryButton("+  Add item");
         add.setContentDescription("Add item");
         add.setOnClickListener(v -> showEditDialog(null));
-        header.addView(add);
+        LinearLayout.LayoutParams addParams = matchWidth();
+        addParams.topMargin = dp(14);
+        header.addView(add, addParams);
+
         outer.addView(header, matchWidth());
 
-        // Secondary actions scroll horizontally instead of overflowing narrow phones.
-        HorizontalScrollView actionScroller = new HorizontalScrollView(this);
-        actionScroller.setHorizontalScrollBarEnabled(false);
-        LinearLayout actions = new LinearLayout(this);
-        actions.setOrientation(LinearLayout.HORIZONTAL);
-        actions.setGravity(Gravity.CENTER_VERTICAL);
-        actions.setPadding(0, dp(8), 0, dp(4));
-
-        Button categories = button("Categories");
-        categories.setOnClickListener(v -> showCustomCategoriesDialog());
-        actions.addView(categories);
-        Button importButton = button("Import");
-        importButton.setOnClickListener(v -> showImportDialog());
-        actions.addView(importButton);
-        Button exportCategory = button("Export");
-        exportCategory.setOnClickListener(v -> exportSelectedCategory());
-        actions.addView(exportCategory);
-        Button backup = button("Backup");
-        backup.setOnClickListener(v -> showBackupRestoreDialog());
-        actions.addView(backup);
-        Button preferences = button("Preferences");
-        preferences.setOnClickListener(v -> showPreferencesDialog());
-        actions.addView(preferences);
-        Button security = button("Security");
-        security.setContentDescription("Security settings");
-        security.setOnClickListener(v -> requestMasterPasswordReauth("Security settings", this::showSecuritySettings));
-        actions.addView(security);
-        Button lock = button("Lock");
-        lock.setOnClickListener(v -> lockVault());
-        actions.addView(lock);
-        actionScroller.addView(actions);
-        outer.addView(actionScroller, matchWidth());
+        LinearLayout browse = UiStyle.verticalCard(this, 14);
+        browse.addView(UiStyle.sectionTitle(this, "Your vault"));
+        browse.addView(UiStyle.sectionCaption(this, "Search entries or narrow the list by category."));
 
         searchBox = field("Search title, username, phone, website or notes", "");
         searchBox.setSingleLine(true);
-        outer.addView(searchBox);
+        browse.addView(searchBox, matchWidth());
+
+        TextView categoryLabel = UiStyle.sectionCaption(this, "Category");
+        categoryLabel.setPadding(0, dp(10), 0, dp(4));
+        browse.addView(categoryLabel);
 
         categoryFilter = new Spinner(this);
-        categoryFilter.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, getFilterCategories()));
-        categoryFilter.setBackground(UiStyle.outlined(this, R.color.keepriva_surface, R.color.keepriva_outline, 10));
-        categoryFilter.setPadding(dp(10), dp(6), dp(10), dp(6));
-        outer.addView(categoryFilter, matchWidth());
+        categoryFilter.setAdapter(new ArrayAdapter<>(
+                this, android.R.layout.simple_spinner_dropdown_item, getFilterCategories()));
+        UiStyle.styleSpinner(categoryFilter);
+        browse.addView(categoryFilter, matchWidth());
+
+        LinearLayout.LayoutParams browseParams = matchWidth();
+        browseParams.topMargin = dp(12);
+        outer.addView(browse, browseParams);
+
+        LinearLayout tools = UiStyle.verticalCard(this, 14);
+        tools.addView(UiStyle.sectionTitle(this, "Manage"));
+        tools.addView(UiStyle.sectionCaption(
+                this, "Organize, transfer, back up and secure your vault."));
+
+        Button categories = button("Categories");
+        categories.setOnClickListener(v -> showCustomCategoriesDialog());
+
+        Button importButton = button("Import");
+        importButton.setOnClickListener(v -> showImportDialog());
+
+        Button exportButton = button("Export");
+        exportButton.setOnClickListener(v -> exportSelectedCategory());
+
+        Button backup = button("Backup");
+        backup.setOnClickListener(v -> showBackupRestoreDialog());
+
+        Button preferences = button("Preferences");
+        preferences.setOnClickListener(v -> showPreferencesDialog());
+
+        Button security = button("Security");
+        security.setContentDescription("Security settings");
+        security.setOnClickListener(
+                v -> requestMasterPasswordReauth("Security settings", this::showSecuritySettings));
+
+        tools.addView(twoColumnActionRow(categories, importButton), matchWidth());
+        tools.addView(twoColumnActionRow(exportButton, backup), matchWidth());
+        tools.addView(twoColumnActionRow(preferences, security), matchWidth());
+
+        LinearLayout.LayoutParams toolsParams = matchWidth();
+        toolsParams.topMargin = dp(12);
+        outer.addView(tools, toolsParams);
+
+        TextView entries = UiStyle.sectionTitle(this, "Entries");
+        entries.setPadding(dp(2), dp(18), 0, dp(6));
+        outer.addView(entries, matchWidth());
 
         listContainer = new LinearLayout(this);
         listContainer.setOrientation(LinearLayout.VERTICAL);
@@ -1149,29 +1251,30 @@ public class MainActivity extends Activity {
             public void onItemSelected(AdapterView<?> p, View v, int pos, long id) { applyFilter(); }
             public void onNothingSelected(AdapterView<?> p) { }
         });
+
         setContentView(wrap(outer));
         loadItems();
     }
 
-    private void lockVault() {
-        if (clipboardSecurity != null) clipboardSecurity.clearSensitiveClipboardNow();
-        clearSessionState();
-        explicitlyLocked = true;
-        backgroundAt = 0;
-        showUnlockScreen();
-    }
+    private LinearLayout twoColumnActionRow(Button left, Button right) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
 
-    private void clearSessionState() {
-        sessionKey = null;
-        allItems.clear();
-        customCategories.clear();
-        clearPendingExportData();
-        clearPendingTemplateData();
-        clearPendingBackupData();
-        systemPickerInProgress = false;
-        systemPickerStartedAt = 0L;
-    }
+        LinearLayout.LayoutParams leftParams = new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        leftParams.rightMargin = dp(5);
 
+        LinearLayout.LayoutParams rightParams = new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        rightParams.leftMargin = dp(5);
+
+        row.addView(left, leftParams);
+        row.addView(right, rightParams);
+
+        row.setPadding(0, dp(8), 0, 0);
+        return row;
+    }
     private void loadItems() {
         try {
             allItems = database.list(sessionKey);
@@ -1195,7 +1298,7 @@ public class MainActivity extends Activity {
             shown++;
         }
         if (shown == 0) {
-            TextView empty = subtitle(allItems.isEmpty() ? "No items yet. Tap + to add your first credential or note." : "No matching items.");
+            TextView empty = subtitle(allItems.isEmpty() ? "No items yet. Tap Add item to create your first credential or note." : "No matching items.");
             empty.setPadding(dp(8), dp(24), dp(8), dp(24));
             listContainer.addView(empty);
         }
@@ -1705,94 +1808,181 @@ public class MainActivity extends Activity {
     }
 
     private void showCustomCategoriesDialog() {
-        LinearLayout body = baseVertical(6);
-        body.addView(subtitle("Categories can contain items and nested custom sub-categories. Maximum configured depth: "
-                + getMaxCategoryDepth() + " (hard maximum " + HARD_MAX_CATEGORY_DEPTH + ")."));
+        LinearLayout body = baseVertical(10);
+        body.setPadding(dp(12), dp(12), dp(12), dp(18));
 
-        body.addView(boldLabel("Built-in root categories"));
+        body.addView(UiStyle.sectionCaption(
+                this,
+                "Categories are shown as a hierarchy. Subcategories appear directly below their parent. "
+                        + "Maximum depth: " + getMaxCategoryDepth()
+                        + " of " + HARD_MAX_CATEGORY_DEPTH + "."
+        ));
+
+        body.addView(UiStyle.sectionTitle(this, "Category hierarchy"));
+
+        Set<String> rendered = new HashSet<>();
+
         for (String builtIn : BUILT_IN_CATEGORIES) {
-            int childCount = directChildCount(builtIn);
-            TextView row = subtitle(builtIn + (childCount == 0 ? "" : "  •  " + childCount + (childCount == 1 ? " sub-category" : " sub-categories")));
-            row.setPadding(dp(8), dp(4), dp(8), dp(4));
-            body.addView(row);
+            addBuiltInCategoryTreeRow(body, builtIn);
+            addCustomCategoryChildren(body, builtIn, 1, rendered);
         }
 
-        body.addView(boldLabel("Custom categories"));
-        List<CustomCategory> sorted = new ArrayList<>(customCategories);
-        sorted.sort((a,b) -> categoryPath(a.name).compareToIgnoreCase(categoryPath(b.name)));
-        for (CustomCategory c : sorted) {
-            LinearLayout row = new LinearLayout(this);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            int depth = categoryDepth(c.name);
-            row.setPadding(dp(Math.max(0, depth - 1) * 14), dp(2), 0, dp(2));
-            TextView name = new TextView(this);
-            name.setText(categoryPath(c.name) + "  •  " + c.fields.size() + " fields");
-            name.setTextSize(15);
-            row.addView(name, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
-            Button edit = button("Edit / Move");
-            edit.setOnClickListener(v -> {
-                AlertDialog parentDialog = findShowingDialogForView(v);
-                if (parentDialog != null) parentDialog.dismiss();
-                showCustomCategoryEditor(c);
-            });
-            row.addView(edit);
-            Button del = button("Delete");
-            UiStyle.styleDangerButton(del);
-            del.setOnClickListener(v -> {
-                AlertDialog parentDialog = findShowingDialogForView(v);
-                if (parentDialog != null) parentDialog.dismiss();
-                deleteCustomCategory(c);
-            });
-            row.addView(del);
-            body.addView(row);
+        List<CustomCategory> topLevel = new ArrayList<>();
+        for (CustomCategory category : customCategories) {
+            if (safe(category.parentName).trim().isEmpty()) topLevel.add(category);
         }
-        if (customCategories.isEmpty()) body.addView(subtitle("No custom categories yet."));
-        Button add = button("+ New custom category / sub-category");
+        topLevel.sort((a,b) -> safe(a.name).compareToIgnoreCase(safe(b.name)));
+
+        for (CustomCategory category : topLevel) {
+            String key = safe(category.name).toLowerCase(Locale.ROOT);
+            if (!rendered.add(key)) continue;
+            addCustomCategoryTreeRow(body, category, 0);
+            addCustomCategoryChildren(body, category.name, 1, rendered);
+        }
+
+        List<CustomCategory> leftovers = new ArrayList<>();
+        for (CustomCategory category : customCategories) {
+            if (!rendered.contains(safe(category.name).toLowerCase(Locale.ROOT))) {
+                leftovers.add(category);
+            }
+        }
+        leftovers.sort((a,b) -> categoryPath(a.name).compareToIgnoreCase(categoryPath(b.name)));
+        for (CustomCategory category : leftovers) {
+            rendered.add(safe(category.name).toLowerCase(Locale.ROOT));
+            addCustomCategoryTreeRow(
+                    body, category, Math.max(0, categoryDepth(category.name) - 1));
+        }
+
+        if (customCategories.isEmpty()) {
+            TextView empty = subtitle("No custom categories yet. Create a category or subcategory below.");
+            empty.setPadding(dp(4), dp(12), dp(4), dp(12));
+            body.addView(empty);
+        }
+
+        Button add = primaryButton("+  New category / subcategory");
+        add.setContentDescription("Add category or subcategory");
         add.setOnClickListener(v -> {
             AlertDialog parentDialog = findShowingDialogForView(v);
             if (parentDialog != null) parentDialog.dismiss();
             showCustomCategoryEditor(null);
         });
-        body.addView(add);
+
+        LinearLayout.LayoutParams addParams = matchWidth();
+        addParams.topMargin = dp(14);
+        body.addView(add, addParams);
+
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("Categories")
                 .setView(wrap(body))
                 .setNegativeButton("Close", null)
                 .create();
+
         body.setTag(dialog);
         ScreenSecurityManager.protect(dialog);
         dialog.show();
     }
 
-    private int directChildCount(String parentName) {
-        int count = 0;
-        for (CustomCategory c : customCategories) if (safe(c.parentName).equals(parentName)) count++;
-        return count;
+    private void addBuiltInCategoryTreeRow(LinearLayout body, String name) {
+        LinearLayout card = UiStyle.verticalCard(this, 12);
+
+        TextView title = new TextView(this);
+        title.setText(name);
+        title.setTextSize(16);
+        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        title.setTextColor(getColor(R.color.keepriva_text_primary));
+        card.addView(title);
+
+        int count = directChildCount(name);
+        card.addView(UiStyle.sectionCaption(
+                this,
+                count == 0
+                        ? "Built-in category"
+                        : "Built-in category • " + count
+                                + (count == 1 ? " subcategory" : " subcategories")
+        ));
+
+        LinearLayout.LayoutParams lp = matchWidth();
+        lp.setMargins(0, dp(8), 0, 0);
+        body.addView(card, lp);
     }
 
-    private CategoryOption[] parentOptionsFor(CustomCategory existing) {
-        List<CategoryOption> options = new ArrayList<>();
-        options.add(new CategoryOption("", "Top level"));
-        int maxDepth = getMaxCategoryDepth();
-        for (String builtIn : BUILT_IN_CATEGORIES) {
-            if (1 < maxDepth) options.add(new CategoryOption(builtIn, builtIn));
-        }
-        List<CustomCategory> sorted = new ArrayList<>(customCategories);
-        sorted.sort((a,b) -> categoryPath(a.name).compareToIgnoreCase(categoryPath(b.name)));
-        for (CustomCategory candidate : sorted) {
-            if (existing != null) {
-                if (candidate.id == existing.id) continue;
-                if (isDescendantOf(candidate.name, existing.name)) continue;
-                if (!moveFitsDepth(existing.name, candidate.name)) continue;
-            } else if (categoryDepth(candidate.name) + 1 > maxDepth) {
-                continue;
+    private void addCustomCategoryChildren(
+            LinearLayout body, String parentName, int depth, Set<String> rendered) {
+
+        List<CustomCategory> children = new ArrayList<>();
+        for (CustomCategory category : customCategories) {
+            if (safe(category.parentName).equalsIgnoreCase(safe(parentName))) {
+                children.add(category);
             }
-            options.add(new CategoryOption(candidate.name, categoryPath(candidate.name)));
         }
-        return options.toArray(new CategoryOption[0]);
+        children.sort((a,b) -> safe(a.name).compareToIgnoreCase(safe(b.name)));
+
+        for (CustomCategory child : children) {
+            String key = safe(child.name).toLowerCase(Locale.ROOT);
+            if (!rendered.add(key)) continue;
+            addCustomCategoryTreeRow(body, child, depth);
+            addCustomCategoryChildren(body, child.name, depth + 1, rendered);
+        }
     }
 
+    private void addCustomCategoryTreeRow(
+            LinearLayout body, CustomCategory category, int depth) {
+
+        LinearLayout indent = new LinearLayout(this);
+        indent.setOrientation(LinearLayout.VERTICAL);
+        indent.setPadding(dp(Math.min(depth, HARD_MAX_CATEGORY_DEPTH) * 18), 0, 0, 0);
+
+        LinearLayout card = UiStyle.verticalCard(this, 12);
+
+        TextView title = new TextView(this);
+        title.setText(category.name + "  •  " + category.fields.size() + " fields");
+        title.setTextSize(15);
+        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        title.setTextColor(getColor(R.color.keepriva_text_primary));
+        card.addView(title);
+
+        String parentName = safe(category.parentName).trim();
+        card.addView(UiStyle.sectionCaption(
+                this,
+                parentName.isEmpty()
+                        ? "Top-level custom category"
+                        : "Subcategory of " + parentName
+        ));
+
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        actions.setGravity(Gravity.END);
+
+        Button edit = button("Edit / Move");
+        UiStyle.styleCompactButton(edit);
+        edit.setOnClickListener(v -> {
+            AlertDialog parentDialog = findShowingDialogForView(v);
+            if (parentDialog != null) parentDialog.dismiss();
+            showCustomCategoryEditor(category);
+        });
+
+        Button del = button("Delete");
+        UiStyle.styleDangerButton(del);
+        del.setOnClickListener(v -> {
+            AlertDialog parentDialog = findShowingDialogForView(v);
+            if (parentDialog != null) parentDialog.dismiss();
+            deleteCustomCategory(category);
+        });
+
+        actions.addView(edit);
+        LinearLayout.LayoutParams delParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        delParams.leftMargin = dp(8);
+        actions.addView(del, delParams);
+
+        card.addView(actions, matchWidth());
+        indent.addView(card, matchWidth());
+
+        LinearLayout.LayoutParams lp = matchWidth();
+        lp.setMargins(0, dp(8), 0, 0);
+        body.addView(indent, lp);
+    }
     private void showCustomCategoryEditor(CustomCategory existing) {
         CustomCategory model = existing == null ? new CustomCategory() : existing;
         LinearLayout form = baseVertical(6);
@@ -1812,9 +2002,9 @@ public class MainActivity extends Activity {
         EditText sensitiveFields = field("Sensitive field names - one per line (optional)", String.join("\n", model.sensitiveFields));
         sensitiveFields.setSingleLine(false); sensitiveFields.setMinLines(4); sensitiveFields.setGravity(Gravity.TOP);
         form.addView(name);
-        form.addView(boldLabel("Parent category"));
+        form.addView(boldLabel("Parent category / folder"));
         form.addView(parent);
-        form.addView(subtitle("Select Top level, a built-in category, or another custom category. Cycles and moves beyond the configured maximum depth are blocked."));
+        form.addView(subtitle("Choose where this category belongs. A subcategory appears directly below its parent. Cycles and moves beyond the configured maximum depth are blocked."));
         form.addView(subtitle("Example fields: Account Number, Recovery Email, Security Question, Membership ID"));
         form.addView(fields);
         form.addView(subtitle("Sensitive fields are omitted from normal TXT/HTML/PDF exports unless you explicitly include them and re-authenticate. Names must match the field list above."));
@@ -1975,7 +2165,7 @@ public class MainActivity extends Activity {
 
     private void showExportFormatChooser(List<VaultItem> items, String suggestedName) {
         LinearLayout box = baseVertical(8);
-        TextView warning = subtitle("TXT, HTML and PDF exports are readable plaintext documents. By default Keepriva omits passwords and custom fields marked sensitive.");
+        TextView warning = subtitle("TXT, HTML, PDF and JSON exports are readable plaintext files. JSON is structured and can be imported back into Keepriva. By default Keepriva omits passwords and custom fields marked sensitive.");
         CheckBox includePasswords = new CheckBox(this);
         includePasswords.setText("Include passwords");
         includePasswords.setChecked(false);
@@ -2062,10 +2252,12 @@ public class MainActivity extends Activity {
                         : "Safe export: passwords and sensitive custom fields will be omitted.");
         box.addView(warning);
 
+        Button json = primaryButton("Keepriva JSON (.json) — re-importable");
         Button txt = button("Formatted text (.txt)");
         Button html = button("HTML page (.html)");
         Button pdf = button("PDF document (.pdf)");
 
+        box.addView(json, matchWidth());
         box.addView(txt, matchWidth());
         box.addView(html, matchWidth());
         box.addView(pdf, matchWidth());
@@ -2076,16 +2268,18 @@ public class MainActivity extends Activity {
                 .setNegativeButton("Cancel", null)
                 .create();
 
+        json.setOnClickListener(v -> {
+            dialog.dismiss();
+            prepareExport(items, suggestedName, 3, options);
+        });
         txt.setOnClickListener(v -> {
             dialog.dismiss();
             prepareExport(items, suggestedName, 0, options);
         });
-
         html.setOnClickListener(v -> {
             dialog.dismiss();
             prepareExport(items, suggestedName, 1, options);
         });
-
         pdf.setOnClickListener(v -> {
             dialog.dismiss();
             prepareExport(items, suggestedName, 2, options);
@@ -2099,23 +2293,36 @@ public class MainActivity extends Activity {
         try {
             String base = sanitizeFileName(suggestedName);
             String filename;
+
             if (format == 0) {
                 pendingExportBytes = ExportManager.toText(items, options).getBytes(StandardCharsets.UTF_8);
-                pendingExportMime = "text/plain"; filename = base + ".txt";
+                pendingExportMime = "text/plain";
+                filename = base + ".txt";
             } else if (format == 1) {
                 pendingExportBytes = ExportManager.toHtml(items, options).getBytes(StandardCharsets.UTF_8);
-                pendingExportMime = "text/html"; filename = base + ".html";
-            } else {
+                pendingExportMime = "text/html";
+                filename = base + ".html";
+            } else if (format == 2) {
                 pendingExportBytes = ExportManager.toPdf(items, options);
-                pendingExportMime = "application/pdf"; filename = base + ".pdf";
+                pendingExportMime = "application/pdf";
+                filename = base + ".pdf";
+            } else {
+                pendingExportBytes = ExportManager
+                        .toImportCompatibleJson(items, options, customCategories)
+                        .getBytes(StandardCharsets.UTF_8);
+                pendingExportMime = "application/json";
+                filename = base + ".json";
             }
+
             Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
             intent.addCategory(Intent.CATEGORY_OPENABLE);
             intent.setType(pendingExportMime);
             intent.putExtra(Intent.EXTRA_TITLE, filename);
             beginSystemPicker();
             startActivityForResult(intent, EXPORT_REQUEST);
-        } catch (Exception e) { toast("Could not prepare export: " + e.getMessage()); }
+        } catch (Exception e) {
+            toast("Could not prepare export: " + e.getMessage());
+        }
     }
 
     private void beginSystemPicker() {
@@ -2327,16 +2534,41 @@ public class MainActivity extends Activity {
     }
 
     private void showImportDialog() {
-        LinearLayout box = baseVertical(8);
-        box.addView(subtitle("The template file itself is not encrypted. If you put passwords or other secrets in it, store it securely and delete it after import. Imported vault records are encrypted before SQLite storage."));
+        LinearLayout box = baseVertical(10);
 
-        Button download = button("Download JSON import template");
-        Button importFile = button("Import filled JSON template");
-        box.addView(download, matchWidth());
-        box.addView(importFile, matchWidth());
+        box.addView(UiStyle.sectionTitle(this, "Bulk import from JSON"));
+        box.addView(UiStyle.sectionCaption(
+                this,
+                "Import is for adding many credentials at once. Keepriva first creates a blank JSON "
+                        + "template that describes categories, fields and entries. Fill it on your computer, "
+                        + "then import the completed JSON back into Keepriva."
+        ));
+
+        TextView steps = subtitle(
+                "1. Save the blank JSON template.\n"
+                        + "2. Fill its entry values in a text editor.\n"
+                        + "3. Import the completed JSON.\n\n"
+                        + "The JSON file is plaintext and NOT encrypted. Keepriva validates it, previews "
+                        + "the changes and encrypts each imported record before local database storage."
+        );
+        steps.setPadding(dp(12), dp(10), dp(12), dp(12));
+        steps.setBackground(UiStyle.outlined(
+                this, R.color.keepriva_surface_soft, R.color.keepriva_outline, 12));
+        box.addView(steps, matchWidth());
+
+        Button download = button("Step 1 — Save JSON import template");
+        Button importFile = primaryButton("Step 2 — Import completed JSON template");
+
+        LinearLayout.LayoutParams first = matchWidth();
+        first.topMargin = dp(10);
+        box.addView(download, first);
+
+        LinearLayout.LayoutParams second = matchWidth();
+        second.topMargin = dp(8);
+        box.addView(importFile, second);
 
         AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("Import")
+                .setTitle("Import data")
                 .setView(box)
                 .setNegativeButton("Cancel", null)
                 .create();

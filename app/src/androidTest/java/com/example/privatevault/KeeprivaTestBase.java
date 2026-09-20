@@ -21,6 +21,8 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.SystemClock;
 import android.view.View;
+import android.view.ViewGroup;
+import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Spinner;
 
@@ -85,6 +87,8 @@ public abstract class KeeprivaTestBase {
 
         onView(withText("Create encrypted vault")).perform(click());
 
+        waitForHomeScreen();
+
         onView(withHint("Search title, username, phone, website or notes"))
                 .check(matches(isDisplayed()));
     }
@@ -98,8 +102,69 @@ public abstract class KeeprivaTestBase {
         onView(withHint("Master password"))
                 .perform(replaceText(TEST_PASSWORD), closeSoftKeyboard());
         onView(withText("Unlock")).perform(click());
+
+        // PBKDF2 now runs off the Android main thread.
+        waitForHomeScreen();
+
         onView(withHint("Search title, username, phone, website or notes"))
                 .check(matches(isDisplayed()));
+    }
+
+    protected void waitForHomeScreen() {
+        waitForUiState("home screen", view ->
+                view instanceof EditText
+                        && "Search title, username, phone, website or notes".contentEquals(
+                                ((EditText) view).getHint()));
+    }
+
+    protected void waitForUnlockReady() {
+        waitForUiState("unlock screen", view ->
+                view instanceof Button
+                        && "Unlock".contentEquals(((Button) view).getText())
+                        && view.isEnabled());
+    }
+
+    private interface ViewPredicate {
+        boolean matches(View view);
+    }
+
+    private void waitForUiState(String description, ViewPredicate predicate) {
+        if (scenario == null) throw new AssertionError("ActivityScenario is unavailable");
+
+        final long deadline = SystemClock.uptimeMillis() + 8000L;
+
+        while (SystemClock.uptimeMillis() < deadline) {
+            final AtomicBoolean matched = new AtomicBoolean(false);
+
+            scenario.onActivity(activity -> {
+                View root = activity.getWindow() == null
+                        ? null
+                        : activity.getWindow().getDecorView();
+                matched.set(root != null && treeMatches(root, predicate));
+            });
+
+            if (matched.get()) {
+                InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+                return;
+            }
+
+            SystemClock.sleep(75L);
+        }
+
+        throw new AssertionError("Timed out waiting for " + description);
+    }
+
+    private static boolean treeMatches(View view, ViewPredicate predicate) {
+        if (predicate.matches(view)) return true;
+
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                if (treeMatches(group.getChildAt(i), predicate)) return true;
+            }
+        }
+
+        return false;
     }
 
     protected void openAddItem() {
@@ -220,7 +285,7 @@ public abstract class KeeprivaTestBase {
 
     protected void createFolderCategory(String name) {
         onView(withText("Categories")).perform(scrollTo(), click());
-        onView(withText("+ New custom category / sub-category"))
+        onView(withText("+  New category / subcategory"))
                 .perform(scrollTo(), click());
 
         onView(withHint("Category name"))

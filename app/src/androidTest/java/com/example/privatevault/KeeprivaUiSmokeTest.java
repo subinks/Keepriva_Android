@@ -80,6 +80,44 @@ public class KeeprivaUiSmokeTest {
                 .check(matches(isDisplayed()));
     }
 
+    private void waitForUnlockReady() {
+        final long deadline = android.os.SystemClock.uptimeMillis() + 8000L;
+
+        while (android.os.SystemClock.uptimeMillis() < deadline) {
+            final java.util.concurrent.atomic.AtomicBoolean ready =
+                    new java.util.concurrent.atomic.AtomicBoolean(false);
+
+            scenario.onActivity(activity ->
+                    ready.set(findEnabledUnlock(activity.getWindow().getDecorView())));
+
+            if (ready.get()) {
+                androidx.test.platform.app.InstrumentationRegistry
+                        .getInstrumentation()
+                        .waitForIdleSync();
+                return;
+            }
+
+            android.os.SystemClock.sleep(75L);
+        }
+
+        throw new AssertionError("Timed out waiting for unlock screen");
+    }
+
+    private static boolean findEnabledUnlock(android.view.View view) {
+        if (view instanceof android.widget.Button) {
+            android.widget.Button button = (android.widget.Button) view;
+            if ("Unlock".contentEquals(button.getText()) && button.isEnabled()) return true;
+        }
+
+        if (view instanceof android.view.ViewGroup) {
+            android.view.ViewGroup group = (android.view.ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                if (findEnabledUnlock(group.getChildAt(i))) return true;
+            }
+        }
+
+        return false;
+    }
     @Test
     public void freshInstall_showsSetupScreen() {
         onView(withText("Create Keepriva")).check(matches(isDisplayed()));
@@ -123,6 +161,7 @@ public class KeeprivaUiSmokeTest {
 
         onView(withText("Unlock")).perform(click());
 
+        waitForUnlockReady();
         onView(withText("Unlock")).check(matches(isDisplayed()));
     }
 
@@ -171,9 +210,9 @@ public class KeeprivaUiSmokeTest {
 
         onView(withText("Import")).perform(scrollTo(), click());
 
-        onView(withText("Download JSON import template"))
+        onView(withText("Step 1 — Save JSON import template"))
                 .check(matches(isDisplayed()));
-        onView(withText("Import filled JSON template"))
+        onView(withText("Step 2 — Import completed JSON template"))
                 .check(matches(isDisplayed()));
     }
 
@@ -217,7 +256,7 @@ public class KeeprivaUiSmokeTest {
         onView(withText("Categories")).perform(scrollTo(), click());
 
         onView(withText("Categories")).check(matches(isDisplayed()));
-        onView(withText("+ New custom category / sub-category"))
+        onView(withText("+  New category / subcategory"))
                 .check(matches(isDisplayed()));
     }
 }

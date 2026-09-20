@@ -51,7 +51,7 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
         createFolderCategory("Duplicate Test");
 
         onView(withText("Categories")).perform(scrollTo(), click());
-        onView(withText("+ New custom category / sub-category")).perform(scrollTo(), click());
+        onView(withText("+  New category / subcategory")).perform(scrollTo(), click());
 
         onView(withHint("Category name"))
                 .perform(replaceText("Duplicate Test"), closeSoftKeyboard());
@@ -65,7 +65,7 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
         createTestVault();
 
         onView(withText("Categories")).perform(scrollTo(), click());
-        onView(withText("+ New custom category / sub-category")).perform(scrollTo(), click());
+        onView(withText("+  New category / subcategory")).perform(scrollTo(), click());
 
         onView(withHint("Category name"))
                 .perform(replaceText("Login"), closeSoftKeyboard());
@@ -79,7 +79,7 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
         createTestVault();
 
         onView(withText("Categories")).perform(scrollTo(), click());
-        onView(withText("+ New custom category / sub-category")).perform(scrollTo(), click());
+        onView(withText("+  New category / subcategory")).perform(scrollTo(), click());
 
         onView(withHint("Category name"))
                 .perform(replaceText("Membership"), closeSoftKeyboard());

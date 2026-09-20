@@ -12,7 +12,7 @@ permissions:
 jobs:
   build-and-verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
 
     steps:
       - name: Checkout initial_commit
@@ -51,9 +51,6 @@ jobs:
             "platforms;android-36" \
             "build-tools;36.0.0"
 
-      # This edit exists only inside the disposable GitHub Actions workspace.
-      # It is never committed back to the repository.
-      # Release/source FLAG_SECURE behavior remains unchanged.
       - name: Allow screenshots only in this CI debug build
         shell: python
         run: |
@@ -126,7 +123,7 @@ jobs:
           java -version
           gradle --version
 
-      - name: Compile, lint, test, and build debug APK
+      - name: Compile, lint, unit test, and build debug APK
         shell: bash
         run: |
           gradle \
@@ -148,11 +145,9 @@ jobs:
             ci-artifacts/screenshots \
             ci-artifacts/ui \
             ci-artifacts/apk \
-            ci-artifacts/logs
+            ci-artifacts/logs \
+            ci-artifacts/reports
 
-      # GitHub-hosted Linux runners normally expose /dev/kvm, but the emulator
-      # runner may fall back to painfully slow software emulation if KVM is not
-      # accessible. Make the device node usable and print diagnostics first.
       - name: Enable and verify KVM acceleration
         shell: bash
         run: |
@@ -175,6 +170,9 @@ jobs:
           #!/usr/bin/env bash
           set -euo pipefail
 
+          PACKAGE="com.example.privatevault.debug"
+          ACTIVITY="com.example.privatevault.MainActivity"
+
           echo "=== Emulator / ADB diagnostics ==="
           adb version
           adb devices -l
@@ -183,20 +181,7 @@ jobs:
           echo "device=$(adb shell getprop ro.product.device || true)"
           echo "sdk=$(adb shell getprop ro.build.version.sdk || true)"
 
-          adb shell settings put global window_animation_scale 0
-          adb shell settings put global transition_animation_scale 0
-          adb shell settings put global animator_duration_scale 0
-
-          adb install -r app/build/outputs/apk/debug/app-debug.apk
-
-
-
-          echo "=== KEEP EMULATOR AWAKE FOR ESPRESSO ==="
-
-          # Large UI suites take long enough for the emulator display/keyguard to become
-          # inactive. Espresso then sees Keepriva's root window but it has no focus,
-          # producing RootViewWithoutFocusException across otherwise unrelated tests.
-          adb wait-for-device
+          echo "=== Keep emulator awake, unlocked and focused ==="
           adb shell input keyevent KEYCODE_WAKEUP || true
           adb shell wm dismiss-keyguard || true
           adb shell input keyevent 82 || true
@@ -204,30 +189,37 @@ jobs:
           adb shell settings put global stay_on_while_plugged_in 3 || true
           adb shell settings put system screen_off_timeout 2147483647 || true
           adb shell dumpsys deviceidle disable || true
+          adb shell settings put global window_animation_scale 0
+          adb shell settings put global transition_animation_scale 0
+          adb shell settings put global animator_duration_scale 0
           adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS || true
           sleep 2
 
-          echo "=== Window / power state before instrumentation ==="
+          echo "=== Install debug APK ==="
+          adb install -r app/build/outputs/apk/debug/app-debug.apk
+
+          echo "=== Power / focus state before instrumentation ==="
           adb shell dumpsys power | grep -E 'mWakefulness|Display Power' || true
           adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp|isStatusBarKeyguard' || true
 
-          echo "=== Running Android instrumentation tests ==="
-
+          echo "=== Run complete Android instrumentation suite ==="
           gradle :app:connectedDebugAndroidTest --stacktrace
-          # Launch Keepriva directly instead of going through Pixel Launcher.
-          # This avoids launcher ANR dialogs interfering with UI verification.
-          adb shell am force-stop com.example.privatevault.debug || true
-          adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS || true
-          adb shell am start -W -n com.example.privatevault.debug/com.example.privatevault.MainActivity
-          sleep 4
 
-          echo "=== Foreground activity after direct launch ==="
-          adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' || true
+          echo "=== Reset app before screenshot verification ==="
+          adb shell pm clear "$PACKAGE" || true
+          adb shell input keyevent KEYCODE_WAKEUP || true
+          adb shell wm dismiss-keyguard || true
+          adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS || true
+
+          echo "=== Launch fresh Keepriva setup screen ==="
+          adb shell am start -W -n "$PACKAGE/$ACTIVITY"
+          sleep 4
 
           adb exec-out screencap -p > ci-artifacts/screenshots/01-fresh-install-setup.png
           adb shell uiautomator dump /sdcard/keepriva-ui.xml || true
           adb pull /sdcard/keepriva-ui.xml ci-artifacts/ui/01-fresh-install-ui.xml || true
 
+          echo "=== Create a deterministic screenshot-test vault ==="
           python3 - <<'PY'
           import re
           import subprocess
@@ -299,126 +291,88 @@ jobs:
           adb shell uiautomator dump /sdcard/keepriva-home-ui.xml || true
           adb pull /sdcard/keepriva-home-ui.xml ci-artifacts/ui/02-vault-home-ui.xml || true
 
-          adb shell am force-stop com.example.privatevault.debug
+          echo "=== Capture real master-password unlock screen ==="
+          adb shell am force-stop "$PACKAGE"
           sleep 1
+          adb shell input keyevent KEYCODE_WAKEUP || true
+          adb shell wm dismiss-keyguard || true
           adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS || true
-
-          adb shell am start -W -n com.example.privatevault.debug/com.example.privatevault.MainActivity
+          adb shell am start -W -n "$PACKAGE/$ACTIVITY"
           sleep 4
 
           adb exec-out screencap -p > ci-artifacts/screenshots/03-real-unlock-screen.png
           adb shell uiautomator dump /sdcard/keepriva-unlock-ui.xml || true
           adb pull /sdcard/keepriva-unlock-ui.xml ci-artifacts/ui/03-real-unlock-ui.xml || true
 
-          
-          
-echo "=== Preparing emulator fingerprint enrollment for real biometric verification ==="
+          echo "=== Prepare emulator biometric verification ==="
+          adb shell input keyevent KEYCODE_WAKEUP || true
+          adb shell wm dismiss-keyguard || true
+          adb shell locksettings set-pin 0000 || true
 
-          
-# Give the emulator a device credential and prepare the virtual fingerprint stack.
-          
-adb root || true
-          
-adb wait-for-device
-          
-adb shell locksettings set-pin 0000 || true
-          
-adb shell settings put secure biometric_virtual_enabled 1 || true
-          
-adb shell setprop persist.vendor.fingerprint.virtual.type rear || true
-          
-adb shell setprop persist.vendor.fingerprint.virtual.enrollments 1 || true
-          
-adb shell cmd fingerprint sync || true
+          # These commands are best-effort because the virtual biometric HAL differs
+          # across emulator system images. The subsequent application test remains
+          # the source of truth and must succeed for biometric verification to pass.
+          adb root || true
+          adb wait-for-device
+          adb shell settings put secure biometric_virtual_enabled 1 || true
+          adb shell setprop persist.vendor.fingerprint.virtual.type rear || true
+          adb shell setprop persist.vendor.fingerprint.virtual.enrollments 1 || true
+          adb shell cmd fingerprint sync || true
 
-          
-echo "=== Running Keepriva biometric enablement flow ==="
+          echo "=== Enable biometric unlock through the real Keepriva UI ==="
+          set +e
+          gradle \
+            :app:connectedDebugAndroidTest \
+            -Pandroid.testInstrumentationRunnerArguments.class=com.example.privatevault.KeeprivaBiometricCiTest \
+            -Pandroid.testInstrumentationRunnerArguments.keeprivaBiometricCi=1 \
+            --stacktrace \
+            > ci-biometric-test.log 2>&1 &
+          BIO_TEST_PID=$!
 
-          
-set +e
-          
-gradle \
-          
-  :app:connectedDebugAndroidTest \
-          
-  -Pandroid.testInstrumentationRunnerArguments.class=com.example.privatevault.KeeprivaBiometricCiTest \
-          
-  -Pandroid.testInstrumentationRunnerArguments.keeprivaBiometricCi=1 \
-          
-  --stacktrace \
-          
-  > ci-biometric-test.log 2>&1 &
-          
-BIO_TEST_PID=$!
+          for i in $(seq 1 20); do
+            adb emu finger touch 1 >/dev/null 2>&1 || true
+            sleep 1
+          done
 
-          
-# While Android BiometricPrompt is active, repeatedly present virtual finger ID 1.
-          
-for i in $(seq 1 20); do
-          
-  adb emu finger touch 1 >/dev/null 2>&1 || true
-          
-  sleep 1
-          
-done
+          wait "$BIO_TEST_PID"
+          BIO_RESULT=$?
+          set -e
 
-          
-wait "$BIO_TEST_PID"
-          
-BIO_RESULT=$?
-          
-set -e
+          cp ci-biometric-test.log ci-artifacts/logs/biometric-test.log || true
 
-          
-cp ci-biometric-test.log ci-artifacts/logs/biometric-test.log || true
+          if [ "$BIO_RESULT" -ne 0 ]; then
+            echo "ERROR: real Keepriva biometric verification did not complete."
+            cat ci-biometric-test.log
+            exit "$BIO_RESULT"
+          fi
 
-          
-if [ "$BIO_RESULT" -ne 0 ]; then
-          
-  echo "ERROR: Keepriva biometric CI verification failed."
-          
-  cat ci-biometric-test.log
-          
-  exit "$BIO_RESULT"
-          
-fi
+          echo "=== Capture genuine biometric-enabled Keepriva unlock screen ==="
+          adb shell am force-stop "$PACKAGE" || true
+          adb shell input keyevent KEYCODE_WAKEUP || true
+          adb shell wm dismiss-keyguard || true
+          adb shell am start -W -n "$PACKAGE/$ACTIVITY"
+          sleep 3
 
-          
-# Re-open Keepriva after instrumentation. The dedicated test leaves
-          
-# biometric unlock configured and the vault locked.
-          
-adb shell am force-stop com.example.privatevault.debug || true
-          
-adb shell am start -W -n com.example.privatevault.debug/com.example.privatevault.MainActivity
-          
-sleep 3
+          adb exec-out screencap -p > ci-artifacts/screenshots/04-biometric-unlock-screen.png
+          adb shell uiautomator dump /sdcard/keepriva-biometric-ui.xml || true
+          adb pull /sdcard/keepriva-biometric-ui.xml ci-artifacts/ui/04-biometric-unlock-ui.xml || true
 
-          
-adb exec-out screencap -p > ci-artifacts/screenshots/04-biometric-unlock-screen.png
-          
-adb shell uiautomator dump /sdcard/keepriva-biometric-ui.xml || true
-          
-adb pull /sdcard/keepriva-biometric-ui.xml ci-artifacts/ui/04-biometric-unlock-ui.xml || true
+          if ! grep -q "Unlock with fingerprint / face" ci-artifacts/ui/04-biometric-unlock-ui.xml; then
+            echo "ERROR: biometric unlock action was not present in the captured Keepriva UI."
+            exit 1
+          fi
 
-          
-if ! grep -q "Unlock with fingerprint / face" ci-artifacts/ui/04-biometric-unlock-ui.xml; then
-          
-  echo "ERROR: biometric unlock action was not present in the captured Keepriva UI."
-          
-  exit 1
-          
-fi
+          echo "PASS: genuine biometric-enabled Keepriva lock screen captured."
 
-          
-echo "PASS: genuine biometric-enabled Keepriva lock screen captured."adb shell dumpsys package com.example.privatevault.debug > ci-artifacts/logs/package-dump.txt
+          adb shell dumpsys package "$PACKAGE" > ci-artifacts/logs/package-dump.txt
           adb logcat -d > ci-artifacts/logs/logcat.txt
           SCRIPT
 
           chmod +x ci-emulator-verification.sh
+          bash -n ci-emulator-verification.sh
 
-      - name: Boot emulator, install app, and capture real screenshots
-        timeout-minutes: 12
+      - name: Boot emulator, run tests, and capture real screenshots
+        timeout-minutes: 25
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -451,36 +405,29 @@ echo "PASS: genuine biometric-enabled Keepriva lock screen captured."adb shell d
               ci-artifacts/apk/Keepriva-debug.apk
           fi
 
-      - name: Copy lint/test reports when available
+      - name: Copy lint and test reports when available
         if: always()
         shell: bash
         run: |
           mkdir -p ci-artifacts/reports
 
           if [ -f app/build/reports/lint-results-debug.html ]; then
-            cp \
-              app/build/reports/lint-results-debug.html \
-              ci-artifacts/reports/
+            cp app/build/reports/lint-results-debug.html ci-artifacts/reports/
           fi
 
           if [ -d app/build/reports/tests ]; then
-            cp -R \
-              app/build/reports/tests \
-              ci-artifacts/reports/
+            cp -R app/build/reports/tests ci-artifacts/reports/
           fi
+
           if [ -d app/build/reports/androidTests ]; then
-            cp -R \
-              app/build/reports/androidTests \
-              ci-artifacts/reports/
+            cp -R app/build/reports/androidTests ci-artifacts/reports/
           fi
 
           if [ -d app/build/outputs/androidTest-results ]; then
-            cp -R \
-              app/build/outputs/androidTest-results \
-              ci-artifacts/reports/
+            cp -R app/build/outputs/androidTest-results ci-artifacts/reports/
           fi
 
-      - name: Upload APK, real screenshots, UI dumps, logs, and reports
+      - name: Upload APK, screenshots, UI dumps, logs, and reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -488,7 +435,3 @@ echo "PASS: genuine biometric-enabled Keepriva lock screen captured."adb shell d
           path: ci-artifacts/**
           if-no-files-found: warn
           retention-days: 14
-
-
-
-

@@ -1638,6 +1638,8 @@ public class MainActivity extends Activity {
         int usedCount = 0;
         for (VaultItem item : allItems) if (safe(item.category).equals(category.name)) usedCount++;
         int childCount = directChildCount(category.name);
+        final int finalUsedCount = usedCount;
+        final int finalChildCount = childCount;
 
         if (usedCount == 0 && childCount == 0) {
             AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Delete category?")
@@ -1660,7 +1662,7 @@ public class MainActivity extends Activity {
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("Move contents before deleting")
                 .setMessage(message)
-                .setPositiveButton("Choose destination", (d, w) -> showMoveCategoryContentsDialog(category, usedCount, childCount))
+                .setPositiveButton("Choose destination", (d, w) -> showMoveCategoryContentsDialog(category, finalUsedCount, finalChildCount))
                 .setNegativeButton("Cancel", null).create();
         ScreenSecurityManager.protect(dialog);
         dialog.show();
@@ -2220,4 +2222,5 @@ public class MainActivity extends Activity {
     private void toast(String s) { Toast.makeText(this, s, Toast.LENGTH_LONG).show(); }
     private static String safe(String s) { return s == null ? "" : s; }
 }
+
 

@@ -95,6 +95,11 @@ public abstract class KeeprivaTestBase {
 
     protected void lockVault() {
         onView(withText("Lock")).perform(scrollTo(), click());
+
+        // showUnlockScreen() replaces the Activity content view. Wait for the
+        // enabled Unlock button to be attached before the next Espresso action.
+        waitForUnlockReady();
+
         onView(withText("Unlock")).check(matches(isDisplayed()));
     }
 
@@ -300,7 +305,17 @@ public abstract class KeeprivaTestBase {
 
     protected void selectHomeCategory(String label) {
         onView(withContentDescription("Open category " + label))
-                .perform(scrollTo(), click());
+                .perform(scrollTo(), performClickDirectly());
+
+        final String expectedHeading =
+                "All categories".equals(label)
+                        ? "Entries — All categories"
+                        : "Entries — " + label;
+
+        waitForUiState("selected category " + label, view ->
+                view instanceof android.widget.TextView
+                        && expectedHeading.contentEquals(
+                                ((android.widget.TextView) view).getText()));
     }
 
     /**
@@ -326,13 +341,13 @@ public abstract class KeeprivaTestBase {
             public void perform(UiController uiController, View view) {
                 if (!view.isEnabled() || !view.isClickable()) {
                     throw new AssertionError(
-                            "Add item view must be enabled and clickable before performClick()");
+                            "Target view must be enabled and clickable before performClick()");
                 }
 
                 boolean handled = view.performClick();
                 if (!handled) {
                     throw new AssertionError(
-                            "View.performClick() returned false; Add item listener was not invoked");
+                            "View.performClick() returned false; target listener was not invoked");
                 }
 
                 uiController.loopMainThreadUntilIdle();

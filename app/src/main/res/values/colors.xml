@@ -1,0 +1,19 @@
+<resources>
+    <!-- Keepriva canonical green/white design tokens. -->
+    <color name="keepriva_primary_dark">#0B604B</color>
+    <color name="keepriva_primary">#0D765B</color>
+    <color name="keepriva_accent">#24A36D</color>
+    <color name="keepriva_background">#F7F9F8</color>
+    <color name="keepriva_surface">#FFFFFF</color>
+    <color name="keepriva_surface_soft">#E9F6F0</color>
+    <color name="keepriva_text_primary">#17201D</color>
+    <color name="keepriva_text_secondary">#66736E</color>
+    <color name="keepriva_outline">#D7E2DD</color>
+    <color name="keepriva_danger">#C62828</color>
+    <color name="keepriva_warning">#F9A825</color>
+
+    <!-- Legacy resource aliases retained so older code/resources remain compatible. -->
+    <color name="vault_primary">@color/keepriva_primary_dark</color>
+    <color name="vault_accent">@color/keepriva_accent</color>
+    <color name="vault_background">@color/keepriva_background</color>
+</resources>

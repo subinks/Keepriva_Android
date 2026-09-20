@@ -1,0 +1,25 @@
+# Gradle / Android Studio
+.gradle/
+.idea/
+**/build/
+local.properties
+*.iml
+
+# Signing material - NEVER commit
+*.jks
+*.keystore
+*.p12
+*.pem
+*.key
+release.properties
+keystore.properties
+
+# Generated artifacts / local exports
+*.apk
+*.aab
+*.apks
+*.pvault
+
+# OS/editor files
+.DS_Store
+Thumbs.db

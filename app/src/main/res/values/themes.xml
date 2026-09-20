@@ -1,0 +1,13 @@
+<resources>
+    <style name="Theme.PrivateVault" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowBackground">@color/keepriva_background</item>
+        <item name="android:colorAccent">@color/keepriva_accent</item>
+        <item name="android:navigationBarColor">@color/keepriva_primary_dark</item>
+        <item name="android:statusBarColor">@color/keepriva_primary_dark</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:textColorPrimary">@color/keepriva_text_primary</item>
+        <item name="android:textColorSecondary">@color/keepriva_text_secondary</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+</resources>

@@ -16,10 +16,8 @@ jobs:
     timeout-minutes: 40
 
     steps:
-      - name: Checkout initial_commit
+      - name: Checkout triggering branch
         uses: actions/checkout@v4
-        with:
-          ref: initial_commit
 
       - name: Set up JDK 17
         uses: actions/setup-java@v5

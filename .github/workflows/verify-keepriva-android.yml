@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - initial_commit
+      - ui_enhancement
 
 permissions:
   contents: read

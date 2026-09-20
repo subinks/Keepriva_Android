@@ -77,10 +77,26 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
 
         onView(withText("Details Item")).perform(click());
 
-        onView(withText("Edit")).check(matches(isDisplayed()));
-        onView(withText("Delete")).check(matches(isDisplayed()));
-        onView(withText("Close")).check(matches(isDisplayed()));
-        onView(withText("Export this entry")).check(matches(isDisplayed()));
+        onView(withText("Details Item"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
+
+        onView(withText("Edit"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
+
+        onView(withText("Delete"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
+
+        onView(withText("Close"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
+
+        onView(withText("Export this entry"))
+                .inRoot(isDialog())
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
     }
 
     @Test

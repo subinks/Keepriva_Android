@@ -23,6 +23,7 @@ import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.HorizontalScrollView;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Spinner;
@@ -234,24 +235,113 @@ public class MainActivity extends Activity {
     private void showUnlockScreen() {
         sessionKey = null;
         explicitlyLocked = true;
-        LinearLayout root = baseVertical(24);
+
+        final int white = Color.WHITE;
+        final int mutedWhite = Color.argb(210, 255, 255, 255);
+
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
         root.setGravity(Gravity.CENTER_HORIZONTAL);
-        root.addView(title("Keepriva"));
-        root.addView(subtitle("Offline encrypted password manager"));
+        root.setPadding(dp(28), dp(42), dp(28), dp(28));
+        root.setBackgroundColor(getColor(R.color.keepriva_primary_dark));
+
+        // Keepriva shield + leaf brand mark.
+        ImageView logo = new ImageView(this);
+        logo.setImageResource(R.drawable.ic_keepriva_shield_leaf);
+        logo.setContentDescription("Keepriva shield and leaf logo");
+        LinearLayout.LayoutParams logoParams =
+                new LinearLayout.LayoutParams(dp(104), dp(104));
+        logoParams.bottomMargin = dp(12);
+        root.addView(logo, logoParams);
+
+        TextView appName = new TextView(this);
+        appName.setText("Keepriva");
+        appName.setTextColor(white);
+        appName.setTextSize(34);
+        appName.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        appName.setGravity(Gravity.CENTER);
+        root.addView(appName, matchWidth());
+
+        TextView tagline = new TextView(this);
+        tagline.setText("Your secrets. Your control.");
+        tagline.setTextColor(mutedWhite);
+        tagline.setTextSize(16);
+        tagline.setGravity(Gravity.CENTER);
+        tagline.setPadding(0, dp(4), 0, dp(24));
+        root.addView(tagline, matchWidth());
+
+        // Biometric-first presentation. The control remains visible even before
+        // setup, but is disabled until a biometric-wrapped vault key exists.
+        Button biometric = primaryButton(
+                isBiometricUnlockConfigured()
+                        ? "Unlock with fingerprint / face"
+                        : "Biometric unlock not enabled");
+        biometric.setCompoundDrawablesWithIntrinsicBounds(
+                0, R.drawable.ic_keepriva_fingerprint, 0, 0);
+        biometric.setCompoundDrawablePadding(dp(8));
+        biometric.setContentDescription(
+                isBiometricUnlockConfigured()
+                        ? "Unlock Keepriva with biometrics"
+                        : "Biometric unlock is not enabled");
+        biometric.setMinHeight(dp(104));
+
+        if (isBiometricUnlockConfigured()) {
+            biometric.setOnClickListener(v -> unlockWithBiometric());
+        } else {
+            biometric.setEnabled(false);
+            biometric.setAlpha(0.62f);
+        }
+        root.addView(biometric, matchWidth());
+
+        TextView biometricHelp = new TextView(this);
+        biometricHelp.setText(
+                isBiometricUnlockConfigured()
+                        ? "Use the fingerprint or strong face authentication registered on this device."
+                        : "Enable biometric unlock later from Security after unlocking with your master password.");
+        biometricHelp.setTextColor(mutedWhite);
+        biometricHelp.setTextSize(13);
+        biometricHelp.setGravity(Gravity.CENTER);
+        biometricHelp.setPadding(0, dp(8), 0, dp(20));
+        root.addView(biometricHelp, matchWidth());
+
+        TextView fallbackLabel = new TextView(this);
+        fallbackLabel.setText("Use master password instead");
+        fallbackLabel.setTextColor(white);
+        fallbackLabel.setTextSize(14);
+        fallbackLabel.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        fallbackLabel.setPadding(0, dp(4), 0, dp(8));
+        root.addView(fallbackLabel, matchWidth());
+
         EditText pass = passwordField("Master password");
-        root.addView(pass);
+        pass.setContentDescription("Master password");
+        root.addView(pass, matchWidth());
+
         Button unlock = primaryButton("Unlock");
+        unlock.setContentDescription("Unlock with master password");
         View.OnClickListener action = v -> unlock(pass.getText().toString());
         unlock.setOnClickListener(action);
-        pass.setOnEditorActionListener((v, actionId, event) -> { action.onClick(v); return true; });
-        root.addView(unlock);
-        if (isBiometricUnlockConfigured()) {
-            Button biometric = button("Unlock with fingerprint / face");
-            biometric.setOnClickListener(v -> unlockWithBiometric());
-            root.addView(biometric);
-            root.addView(subtitle("You can always use the master password instead."));
-        }
-        setContentView(wrap(root));
+        pass.setOnEditorActionListener((v, actionId, event) -> {
+            action.onClick(v);
+            return true;
+        });
+
+        LinearLayout.LayoutParams unlockParams = matchWidth();
+        unlockParams.topMargin = dp(10);
+        root.addView(unlock, unlockParams);
+
+        TextView footer = new TextView(this);
+        footer.setText("Fully offline  •  Secure  •  Private");
+        footer.setTextColor(Color.argb(190, 255, 255, 255));
+        footer.setTextSize(12);
+        footer.setGravity(Gravity.CENTER);
+        footer.setPadding(0, dp(28), 0, dp(4));
+        root.addView(footer, matchWidth());
+
+        ScrollView screen = new ScrollView(this);
+        screen.setFillViewport(true);
+        screen.setBackgroundColor(getColor(R.color.keepriva_primary_dark));
+        screen.addView(root);
+        setContentView(screen);
     }
 
     private void unlock(String password) {
@@ -2520,6 +2610,7 @@ public class MainActivity extends Activity {
     private void toast(String s) { Toast.makeText(this, s, Toast.LENGTH_LONG).show(); }
     private static String safe(String s) { return s == null ? "" : s; }
 }
+
 
 
 

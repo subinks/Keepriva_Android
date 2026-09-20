@@ -154,7 +154,17 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
         onView(withHint("Confirm backup password"))
                 .perform(replaceText("BackupPass123!"), closeSoftKeyboard());
 
-        onView(withText("Continue")).perform(click());
+        /*
+         * Continue belongs to the backup-password AlertDialog. The click
+         * immediately dismisses that dialog and launches ACTION_CREATE_DOCUMENT.
+         * On the CI emulator the Activity can therefore lose focus before
+         * Espresso's default root picker finishes resolving the click.
+         *
+         * Pin the action to the dialog root that actually owns the button.
+         */
+        onView(withText("Continue"))
+                .inRoot(isDialog())
+                .perform(click());
 
         intended(allOf(
                 hasAction(Intent.ACTION_CREATE_DOCUMENT),

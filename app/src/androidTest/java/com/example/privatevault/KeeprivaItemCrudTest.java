@@ -102,12 +102,24 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
         createLoginItem("Show Hide", "user@test.com", "Secret123!");
 
         onView(withText("Show Hide")).perform(click());
-        onView(withText("Show")).perform(click());
 
-        onView(withText("Secret123!")).check(matches(isDisplayed()));
-        onView(withText("Hide")).perform(click());
+        onView(withText("Show"))
+                .inRoot(isDialog())
+                .perform(scrollTo(), click());
 
-        onView(withText("••••••••••••")).check(matches(isDisplayed()));
+        onView(withText("Secret123!"))
+                .inRoot(isDialog())
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
+
+        onView(withText("Hide"))
+                .inRoot(isDialog())
+                .perform(scrollTo(), click());
+
+        onView(withText("••••••••••••"))
+                .inRoot(isDialog())
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
     }
 
     @Test
@@ -138,11 +150,26 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
         createBasicItem("Keep Me");
 
         onView(withText("Keep Me")).perform(click());
-        onView(withText("Delete")).perform(click());
-        onView(withText("Cancel")).perform(click());
-        onView(withText("Close")).perform(click());
 
-        onView(withText("Keep Me")).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withText("Delete"))
+                .inRoot(isDialog())
+                .perform(click());
+
+        onView(withText("Delete item?"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
+
+        onView(withText("Cancel"))
+                .inRoot(isDialog())
+                .perform(click());
+
+        onView(withText("Close"))
+                .inRoot(isDialog())
+                .perform(click());
+
+        onView(withText("Keep Me"))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
     }
 
     @Test

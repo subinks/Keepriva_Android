@@ -7,7 +7,7 @@ import static androidx.test.espresso.action.ViewActions.replaceText;
 import static androidx.test.espresso.action.ViewActions.scrollTo;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
-import static androidx.test.espresso.matcher.ViewMatchers.withHint;
+import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;`nimport static androidx.test.espresso.matcher.ViewMatchers.withHint;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
@@ -24,7 +24,7 @@ public class KeeprivaSecuritySettingsTest extends KeeprivaTestBase {
     public void securityRequiresReauthentication() {
         createTestVault();
 
-        onView(withText("Security")).perform(scrollTo(), click());
+        onView(withContentDescription("Security")).perform(scrollTo(), click());
 
         onView(withHint("Master password")).check(matches(isDisplayed()));
         onView(withText("Continue")).check(matches(isDisplayed()));
@@ -34,7 +34,7 @@ public class KeeprivaSecuritySettingsTest extends KeeprivaTestBase {
     public void wrongSecurityPassword_keepsDialogOpen() {
         createTestVault();
 
-        onView(withText("Security")).perform(scrollTo(), click());
+        onView(withContentDescription("Security")).perform(scrollTo(), click());
         onView(withHint("Master password"))
                 .perform(replaceText("WrongPassword123!"), closeSoftKeyboard());
         onView(withText("Continue")).perform(click());
@@ -83,6 +83,7 @@ public class KeeprivaSecuritySettingsTest extends KeeprivaTestBase {
         onView(withText("Save")).perform(click());
 
         onView(withHint("Search title, username, phone, website or notes"))
+                .perform(scrollTo())
                 .check(matches(isDisplayed()));
     }
 
@@ -109,6 +110,7 @@ public class KeeprivaSecuritySettingsTest extends KeeprivaTestBase {
         onView(withText("Save")).perform(click());
 
         onView(withHint("Search title, username, phone, website or notes"))
+                .perform(scrollTo())
                 .check(matches(isDisplayed()));
     }
 

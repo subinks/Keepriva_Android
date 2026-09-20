@@ -3,7 +3,7 @@ package com.example.privatevault;
 import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.action.ViewActions.click;
 import static androidx.test.espresso.action.ViewActions.closeSoftKeyboard;
-import static androidx.test.espresso.action.ViewActions.replaceText;
+import static androidx.test.espresso.action.ViewActions.replaceText;`nimport static androidx.test.espresso.action.ViewActions.scrollTo;
 import static androidx.test.espresso.assertion.ViewAssertions.doesNotExist;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
@@ -48,7 +48,8 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
 
         cancelItemEditor();
 
-        onView(withText("No items yet. Tap + to add your first credential or note."))
+        onView(withText("No items yet. Tap Add item to create your first credential or note."))
+                .perform(scrollTo())
                 .check(matches(isDisplayed()));
     }
 
@@ -57,7 +58,7 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
         createTestVault();
         createBasicItem("Alpha Item");
 
-        onView(withText("Alpha Item")).check(matches(isDisplayed()));
+        onView(withText("Alpha Item")).perform(scrollTo()).check(matches(isDisplayed()));
     }
 
     @Test
@@ -65,7 +66,7 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
         createTestVault();
         createLoginItem("Git Login", "user@example.com", "Secret123!");
 
-        onView(withText("Git Login")).check(matches(isDisplayed()));
+        onView(withText("Git Login")).perform(scrollTo()).check(matches(isDisplayed()));
     }
 
     @Test
@@ -116,7 +117,7 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
         onView(withHint("Search title, username, phone, website or notes"))
                 .perform(replaceText("Searchable"), closeSoftKeyboard());
 
-        onView(withText("Searchable Credential")).check(matches(isDisplayed()));
+        onView(withText("Searchable Credential")).perform(scrollTo()).check(matches(isDisplayed()));
     }
 
     @Test
@@ -127,7 +128,7 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
         onView(withHint("Search title, username, phone, website or notes"))
                 .perform(replaceText("does-not-exist"), closeSoftKeyboard());
 
-        onView(withText("No matching items.")).check(matches(isDisplayed()));
+        onView(withText("No matching items.")).perform(scrollTo()).check(matches(isDisplayed()));
     }
 
     @Test
@@ -140,7 +141,7 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
         onView(withText("Cancel")).perform(click());
         onView(withText("Close")).perform(click());
 
-        onView(withText("Keep Me")).check(matches(isDisplayed()));
+        onView(withText("Keep Me")).perform(scrollTo()).check(matches(isDisplayed()));
     }
 
     @Test
@@ -155,6 +156,6 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
         onView(withText("Item deleted")).check(matches(isDisplayed()));
         onView(withText("Undo")).perform(click());
 
-        onView(withText("Undo Me")).check(matches(isDisplayed()));
+        onView(withText("Undo Me")).perform(scrollTo()).check(matches(isDisplayed()));
     }
 }

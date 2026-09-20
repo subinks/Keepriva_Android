@@ -173,7 +173,7 @@ public abstract class KeeprivaTestBase {
          * the API-35 CI emulator. Invoke the real registered listener directly,
          * then explicitly switch Espresso to the dialog root.
          */
-        onView(withContentDescription("Add item")).perform(performClickDirectly());
+        onView(withContentDescription("Add item")).perform(scrollTo(), performClickDirectly());
 
         // AlertDialog owns window focus now. Never let Espresso choose the
         // underlying Activity root while the editor dialog is open.
@@ -204,7 +204,7 @@ public abstract class KeeprivaTestBase {
         openAddItem();
         typeItemTitle(titleText);
         saveItemEditor();
-        onView(withText(titleText)).check(matches(isDisplayed()));
+        onView(withText(titleText)).perform(scrollTo()).check(matches(isDisplayed()));
     }
 
     protected void createLoginItem(String titleText, String username, String password) {
@@ -220,7 +220,7 @@ public abstract class KeeprivaTestBase {
                 .perform(scrollTo(), replaceText(password), closeSoftKeyboard());
 
         saveItemEditor();
-        onView(withText(titleText)).check(matches(isDisplayed()));
+        onView(withText(titleText)).perform(scrollTo()).check(matches(isDisplayed()));
     }
 
     protected void saveItemEditor() {
@@ -273,7 +273,7 @@ public abstract class KeeprivaTestBase {
                 "MainActivity did not regain stable window focus within 5 seconds");
     }
     protected void openSecuritySettings() {
-        onView(withText("Security")).perform(scrollTo(), click());
+        onView(withContentDescription("Security")).perform(scrollTo(), click());
 
         onView(withHint("Master password"))
                 .perform(replaceText(TEST_PASSWORD), closeSoftKeyboard());
@@ -284,7 +284,7 @@ public abstract class KeeprivaTestBase {
     }
 
     protected void createFolderCategory(String name) {
-        onView(withText("Categories")).perform(scrollTo(), click());
+        onView(withContentDescription("Manage categories")).perform(scrollTo(), click());
         onView(withText("+  New category / subcategory"))
                 .perform(scrollTo(), click());
 
@@ -298,8 +298,8 @@ public abstract class KeeprivaTestBase {
     }
 
     protected void selectHomeCategory(String label) {
-        onView(isAssignableFrom(Spinner.class)).perform(click());
-        onData(hasToString(is(label))).perform(click());
+        onView(withContentDescription("Open category " + label))
+                .perform(scrollTo(), click());
     }
 
     /**

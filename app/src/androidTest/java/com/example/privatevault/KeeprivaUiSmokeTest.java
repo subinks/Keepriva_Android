@@ -135,9 +135,9 @@ public class KeeprivaUiSmokeTest {
 
         onView(withHint("Search title, username, phone, website or notes"))
                 .check(matches(isDisplayed()));
-        onView(withText("Import")).check(matches(isDisplayed()));
-        onView(withText("Export")).check(matches(isDisplayed()));
-        onView(withText("Backup")).check(matches(isDisplayed()));
+        onView(withContentDescription("Import")).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Export")).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Backup & Restore")).perform(scrollTo()).check(matches(isDisplayed()));
     }
 
     @Test
@@ -169,7 +169,7 @@ public class KeeprivaUiSmokeTest {
     public void addItem_requiresTitle() {
         createTestVault();
 
-        onView(withContentDescription("Add item")).perform(new androidx.test.espresso.ViewAction() {
+        onView(withContentDescription("Add item")).perform(scrollTo(), new androidx.test.espresso.ViewAction() {
             @Override
             public org.hamcrest.Matcher<android.view.View> getConstraints() {
                 return isDisplayed();
@@ -208,7 +208,7 @@ public class KeeprivaUiSmokeTest {
     public void importDialog_showsBothActions() {
         createTestVault();
 
-        onView(withText("Import")).perform(scrollTo(), click());
+        onView(withContentDescription("Import")).perform(scrollTo(), click());
 
         onView(withText("Step 1 — Save JSON import template"))
                 .check(matches(isDisplayed()));
@@ -220,7 +220,7 @@ public class KeeprivaUiSmokeTest {
     public void backupDialog_showsBothActions() {
         createTestVault();
 
-        onView(withText("Backup")).perform(scrollTo(), click());
+        onView(withContentDescription("Backup & Restore")).perform(scrollTo(), click());
 
         onView(withText("Create encrypted .pvault backup"))
                 .check(matches(isDisplayed()));
@@ -232,7 +232,7 @@ public class KeeprivaUiSmokeTest {
     public void exportWithNoItems_doesNotCrash() {
         createTestVault();
 
-        onView(withText("Export")).perform(scrollTo(), click());
+        onView(withContentDescription("Export")).perform(scrollTo(), click());
 
         onView(withHint("Search title, username, phone, website or notes"))
                 .check(matches(isDisplayed()));
@@ -242,7 +242,7 @@ public class KeeprivaUiSmokeTest {
     public void preferencesDialog_isReachable() {
         createTestVault();
 
-        onView(withText("Preferences")).perform(scrollTo(), click());
+        onView(withContentDescription("Preferences")).perform(scrollTo(), click());
 
         onView(withText("Preferences")).check(matches(isDisplayed()));
         onView(withText("Enable editing category nesting depth"))
@@ -253,7 +253,7 @@ public class KeeprivaUiSmokeTest {
     public void categoriesDialog_isReachable() {
         createTestVault();
 
-        onView(withText("Categories")).perform(scrollTo(), click());
+        onView(withContentDescription("Manage categories")).perform(scrollTo(), click());
 
         onView(withText("Categories")).check(matches(isDisplayed()));
         onView(withText("+  New category / subcategory"))

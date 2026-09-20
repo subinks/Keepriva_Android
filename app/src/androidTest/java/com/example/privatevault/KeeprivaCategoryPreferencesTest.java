@@ -8,7 +8,7 @@ import static androidx.test.espresso.action.ViewActions.replaceText;
 import static androidx.test.espresso.action.ViewActions.scrollTo;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
-import static androidx.test.espresso.matcher.ViewMatchers.withHint;
+import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;`nimport static androidx.test.espresso.matcher.ViewMatchers.withHint;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 import static org.hamcrest.Matchers.hasToString;
 import static org.hamcrest.Matchers.is;
@@ -29,7 +29,7 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
     @Test
     public void categoriesDialog_listsBuiltIns() {
         createTestVault();
-        onView(withText("Categories")).perform(scrollTo(), click());
+        onView(withContentDescription("Manage categories")).perform(scrollTo(), click());
 
         onView(withText("Login")).check(matches(isDisplayed()));
         onView(withText("Banking")).check(matches(isDisplayed()));
@@ -41,7 +41,7 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
         createTestVault();
         createFolderCategory("Folder Only");
 
-        onView(withText("Categories")).perform(scrollTo(), click());
+        onView(withContentDescription("Manage categories")).perform(scrollTo(), click());
         onView(withText("Folder Only  •  0 fields")).check(matches(isDisplayed()));
     }
 
@@ -50,7 +50,7 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
         createTestVault();
         createFolderCategory("Duplicate Test");
 
-        onView(withText("Categories")).perform(scrollTo(), click());
+        onView(withContentDescription("Manage categories")).perform(scrollTo(), click());
         onView(withText("+  New category / subcategory")).perform(scrollTo(), click());
 
         onView(withHint("Category name"))
@@ -64,7 +64,7 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
     public void builtInCategoryName_isRejected() {
         createTestVault();
 
-        onView(withText("Categories")).perform(scrollTo(), click());
+        onView(withContentDescription("Manage categories")).perform(scrollTo(), click());
         onView(withText("+  New category / subcategory")).perform(scrollTo(), click());
 
         onView(withHint("Category name"))
@@ -78,7 +78,7 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
     public void categoryWithCustomFields_canBeCreated() {
         createTestVault();
 
-        onView(withText("Categories")).perform(scrollTo(), click());
+        onView(withContentDescription("Manage categories")).perform(scrollTo(), click());
         onView(withText("+  New category / subcategory")).perform(scrollTo(), click());
 
         onView(withHint("Category name"))
@@ -92,7 +92,7 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
 
         onView(withText("Save")).perform(click());
 
-        onView(withText("Categories")).perform(scrollTo(), click());
+        onView(withContentDescription("Manage categories")).perform(scrollTo(), click());
         onView(withText("Membership  •  2 fields")).check(matches(isDisplayed()));
     }
 
@@ -144,6 +144,7 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
         onView(withText("Save")).perform(click());
 
         onView(withHint("Search title, username, phone, website or notes"))
+                .perform(scrollTo())
                 .check(matches(isDisplayed()));
     }
 
@@ -152,7 +153,8 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
         createTestVault();
         createFolderCategory("Filter Category");
 
-        onView(ViewMatchers.isAssignableFrom(Spinner.class)).perform(click());
-        onData(hasToString(is("Filter Category"))).check(matches(isDisplayed()));
+        onView(withContentDescription("Open category Filter Category"))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
     }
 }

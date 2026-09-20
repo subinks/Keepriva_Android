@@ -1254,6 +1254,7 @@ public class MainActivity extends Activity {
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
 
         Button manageCategories = button("Manage");
+        manageCategories.setContentDescription("Manage categories");
         UiStyle.styleCompactButton(manageCategories);
         manageCategories.setOnClickListener(v -> showCustomCategoriesDialog());
         categoryHeader.addView(manageCategories);

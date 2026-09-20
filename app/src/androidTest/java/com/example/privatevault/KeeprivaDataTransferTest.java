@@ -10,7 +10,7 @@ import static androidx.test.espresso.intent.Intents.intended;
 import static androidx.test.espresso.intent.Intents.intending;
 import static androidx.test.espresso.intent.matcher.IntentMatchers.hasAction;
 import static androidx.test.espresso.intent.matcher.IntentMatchers.hasType;
-import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
+import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;`nimport static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;
 import static androidx.test.espresso.matcher.ViewMatchers.withHint;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 import static org.hamcrest.Matchers.allOf;
@@ -52,7 +52,7 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
     public void importDialog_hasBothActions() {
         createTestVault();
 
-        onView(withText("Import")).perform(scrollTo(), click());
+        onView(withContentDescription("Import")).perform(scrollTo(), click());
 
         onView(withText("Step 1 — Save JSON import template")).check(matches(isDisplayed()));
         onView(withText("Step 2 — Import completed JSON template")).check(matches(isDisplayed()));
@@ -66,7 +66,7 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
                 .respondWith(new android.app.Instrumentation.ActivityResult(
                         Activity.RESULT_CANCELED, null));
 
-        onView(withText("Import")).perform(scrollTo(), click());
+        onView(withContentDescription("Import")).perform(scrollTo(), click());
         onView(withText("Step 1 — Save JSON import template")).perform(click());
 
         intended(allOf(
@@ -83,7 +83,7 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
                 .respondWith(new android.app.Instrumentation.ActivityResult(
                         Activity.RESULT_CANCELED, null));
 
-        onView(withText("Import")).perform(scrollTo(), click());
+        onView(withContentDescription("Import")).perform(scrollTo(), click());
         onView(withText("Step 2 — Import completed JSON template")).perform(click());
 
         intended(allOf(
@@ -96,7 +96,7 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
     public void backupDialog_hasCreateAndRestore() {
         createTestVault();
 
-        onView(withText("Backup")).perform(scrollTo(), click());
+        onView(withContentDescription("Backup & Restore")).perform(scrollTo(), click());
 
         onView(withText("Create encrypted .pvault backup")).check(matches(isDisplayed()));
         onView(withText("Restore encrypted .pvault backup")).check(matches(isDisplayed()));
@@ -106,7 +106,7 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
     public void shortBackupPassword_keepsDialogOpen() {
         createTestVault();
 
-        onView(withText("Backup")).perform(scrollTo(), click());
+        onView(withContentDescription("Backup & Restore")).perform(scrollTo(), click());
         onView(withText("Create encrypted .pvault backup")).perform(click());
 
         onView(withHint("Backup password (10+ characters)"))
@@ -123,7 +123,7 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
     public void mismatchedBackupPasswords_keepDialogOpen() {
         createTestVault();
 
-        onView(withText("Backup")).perform(scrollTo(), click());
+        onView(withContentDescription("Backup & Restore")).perform(scrollTo(), click());
         onView(withText("Create encrypted .pvault backup")).perform(click());
 
         onView(withHint("Backup password (10+ characters)"))
@@ -144,7 +144,7 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
                 .respondWith(new android.app.Instrumentation.ActivityResult(
                         Activity.RESULT_CANCELED, null));
 
-        onView(withText("Backup")).perform(scrollTo(), click());
+        onView(withContentDescription("Backup & Restore")).perform(scrollTo(), click());
         onView(withText("Create encrypted .pvault backup")).perform(click());
 
         onView(withHint("Backup password (10+ characters)"))
@@ -168,7 +168,7 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
                 .respondWith(new android.app.Instrumentation.ActivityResult(
                         Activity.RESULT_CANCELED, null));
 
-        onView(withText("Backup")).perform(scrollTo(), click());
+        onView(withContentDescription("Backup & Restore")).perform(scrollTo(), click());
         onView(withText("Restore encrypted .pvault backup")).perform(click());
         onView(withText("Choose .pvault file")).perform(click());
 

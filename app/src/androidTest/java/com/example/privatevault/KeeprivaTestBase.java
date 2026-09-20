@@ -12,12 +12,14 @@ import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;
 import static androidx.test.espresso.matcher.ViewMatchers.withHint;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
+import static androidx.test.espresso.matcher.RootMatchers.isDialog;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.hasToString;
 import static org.hamcrest.Matchers.is;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.os.SystemClock;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.Spinner;
@@ -26,12 +28,15 @@ import androidx.test.core.app.ActivityScenario;
 import androidx.test.espresso.UiController;
 import androidx.test.espresso.ViewAction;
 import androidx.test.core.app.ApplicationProvider;
+import androidx.test.platform.app.InstrumentationRegistry;
 
 import org.hamcrest.Description;
 import org.hamcrest.Matcher;
 import org.hamcrest.TypeSafeMatcher;
 import org.junit.After;
 import org.junit.Before;
+
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Shared deterministic UI-test base.
@@ -99,50 +104,109 @@ public abstract class KeeprivaTestBase {
 
     protected void openAddItem() {
         /*
-         * Espresso's coordinate-based click is unreliable for the compact "+" action
-         * in the programmatic header on the API-35 emulator. The failure artifact
-         * proves the click action completes while the Activity remains on the home
-         * hierarchy and the editor window is never created.
-         *
-         * performClickDirectly() invokes the exact View.OnClickListener registered by
-         * MainActivity, on Espresso's UI thread, and then waits for the main queue to
-         * become idle. This still exercises the real application navigation/editor
-         * code; it only removes the flaky synthetic touch-coordinate layer.
+         * The "+" action is tiny and its synthetic coordinate click was flaky on
+         * the API-35 CI emulator. Invoke the real registered listener directly,
+         * then explicitly switch Espresso to the dialog root.
          */
         onView(withContentDescription("Add item")).perform(performClickDirectly());
 
-        // Verify that we really reached the editor before any CRUD helper continues.
-        onView(withText("Add vault item")).check(matches(isDisplayed()));
-        onView(withContentDescription("Save vault item")).check(matches(isDisplayed()));
-        onView(withContentDescription("Cancel vault item")).check(matches(isDisplayed()));
+        // AlertDialog owns window focus now. Never let Espresso choose the
+        // underlying Activity root while the editor dialog is open.
+        onView(withText("Add vault item"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
+
+        onView(withContentDescription("Save vault item"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
+
+        onView(withContentDescription("Cancel vault item"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
+    }
+
+    protected void typeItemTitle(String titleText) {
+        /*
+         * Do not use "first visible EditText". The editor is scrollable and a field
+         * can legitimately exist outside the current viewport.
+         */
+        onView(withHint("Title"))
+                .inRoot(isDialog())
+                .perform(scrollTo(), replaceText(titleText), closeSoftKeyboard());
     }
 
     protected void createBasicItem(String titleText) {
         openAddItem();
-
-        onView(withIndex(allOf(isAssignableFrom(EditText.class), isDisplayed()), 0))
-                .perform(replaceText(titleText), closeSoftKeyboard());
-
-        onView(withContentDescription("Save vault item")).perform(click());
+        typeItemTitle(titleText);
+        saveItemEditor();
         onView(withText(titleText)).check(matches(isDisplayed()));
     }
 
     protected void createLoginItem(String titleText, String username, String password) {
         openAddItem();
-
-        onView(withIndex(allOf(isAssignableFrom(EditText.class), isDisplayed()), 0))
-                .perform(replaceText(titleText), closeSoftKeyboard());
+        typeItemTitle(titleText);
 
         onView(withHint("Username / email (optional)"))
-                .perform(replaceText(username), closeSoftKeyboard());
+                .inRoot(isDialog())
+                .perform(scrollTo(), replaceText(username), closeSoftKeyboard());
 
         onView(withHint("Password (optional)"))
-                .perform(replaceText(password), closeSoftKeyboard());
+                .inRoot(isDialog())
+                .perform(scrollTo(), replaceText(password), closeSoftKeyboard());
 
-        onView(withContentDescription("Save vault item")).perform(click());
+        saveItemEditor();
         onView(withText(titleText)).check(matches(isDisplayed()));
     }
 
+    protected void saveItemEditor() {
+        onView(withContentDescription("Save vault item"))
+                .inRoot(isDialog())
+                .perform(click());
+
+        // A successful save dismisses the dialog. Wait until the Activity's
+        // decor window has actually regained focus before touching home views.
+        waitForActivityWindowFocus();
+    }
+
+    protected void cancelItemEditor() {
+        onView(withContentDescription("Cancel vault item"))
+                .inRoot(isDialog())
+                .perform(click());
+
+        waitForActivityWindowFocus();
+    }
+
+    protected void waitForActivityWindowFocus() {
+        if (scenario == null) {
+            throw new AssertionError("ActivityScenario is not available");
+        }
+
+        final long deadline = SystemClock.uptimeMillis() + 5000L;
+
+        while (SystemClock.uptimeMillis() < deadline) {
+            final AtomicBoolean focused = new AtomicBoolean(false);
+
+            scenario.onActivity(activity -> {
+                View decor = activity.getWindow() == null
+                        ? null
+                        : activity.getWindow().getDecorView();
+                focused.set(decor != null
+                        && decor.isAttachedToWindow()
+                        && decor.hasWindowFocus()
+                        && !decor.isLayoutRequested());
+            });
+
+            if (focused.get()) {
+                InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+                return;
+            }
+
+            SystemClock.sleep(50L);
+        }
+
+        throw new AssertionError(
+                "MainActivity did not regain stable window focus within 5 seconds");
+    }
     protected void openSecuritySettings() {
         onView(withText("Security")).perform(scrollTo(), click());
 

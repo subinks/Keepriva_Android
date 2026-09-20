@@ -10,6 +10,7 @@ import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;
 import static androidx.test.espresso.matcher.ViewMatchers.withHint;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
+import static androidx.test.espresso.matcher.RootMatchers.isDialog;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.filters.LargeTest;
@@ -26,8 +27,8 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
         createTestVault();
         openAddItem();
 
-        onView(withContentDescription("Save vault item")).check(matches(isDisplayed()));
-        onView(withText("Cancel")).check(matches(isDisplayed()));
+        onView(withContentDescription("Save vault item")).inRoot(isDialog()).check(matches(isDisplayed()));
+        onView(withContentDescription("Cancel vault item")).inRoot(isDialog()).check(matches(isDisplayed()));
     }
 
     @Test
@@ -35,9 +36,9 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
         createTestVault();
         openAddItem();
 
-        onView(withContentDescription("Save vault item")).perform(click());
+        onView(withContentDescription("Save vault item")).inRoot(isDialog()).perform(click());
 
-        onView(withContentDescription("Save vault item")).check(matches(isDisplayed()));
+        onView(withContentDescription("Save vault item")).inRoot(isDialog()).check(matches(isDisplayed()));
     }
 
     @Test
@@ -45,7 +46,7 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
         createTestVault();
         openAddItem();
 
-        onView(withContentDescription("Cancel vault item")).perform(click());
+        cancelItemEditor();
 
         onView(withText("No items yet. Tap + to add your first credential or note."))
                 .check(matches(isDisplayed()));

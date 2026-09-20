@@ -57,7 +57,7 @@ public class KeeprivaLifecycleRobustnessTest extends KeeprivaTestBase {
         createTestVault();
         openAddItem();
 
-        onView(withText("Cancel")).perform(click());
+        cancelItemEditor();
 
         onView(withHint("Search title, username, phone, website or notes"))
                 .check(matches(isDisplayed()));
@@ -68,7 +68,7 @@ public class KeeprivaLifecycleRobustnessTest extends KeeprivaTestBase {
         createTestVault();
 
         onView(withText("Security")).perform(androidx.test.espresso.action.ViewActions.scrollTo(), click());
-        onView(withText("Cancel")).perform(click());
+        cancelItemEditor();
 
         onView(withHint("Search title, username, phone, website or notes"))
                 .check(matches(isDisplayed()));

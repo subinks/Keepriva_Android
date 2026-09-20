@@ -10,6 +10,7 @@ import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;
 import static androidx.test.espresso.matcher.ViewMatchers.withHint;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
+import static androidx.test.espresso.matcher.RootMatchers.isDialog;
 
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -153,15 +154,15 @@ public class KeeprivaUiSmokeTest {
             }
         });
 
-        onView(withText("Add vault item")).check(matches(isDisplayed()));
-        onView(withContentDescription("Save vault item")).check(matches(isDisplayed()));
-        onView(withContentDescription("Cancel vault item")).check(matches(isDisplayed()));
+        onView(withText("Add vault item")).inRoot(isDialog()).check(matches(isDisplayed()));
+        onView(withContentDescription("Save vault item")).inRoot(isDialog()).check(matches(isDisplayed()));
+        onView(withContentDescription("Cancel vault item")).inRoot(isDialog()).check(matches(isDisplayed()));
 
-        onView(withContentDescription("Save vault item")).perform(click());
+        onView(withContentDescription("Save vault item")).inRoot(isDialog()).perform(click());
 
         // Validation must keep the add form open.
-        onView(withContentDescription("Save vault item")).check(matches(isDisplayed()));
-        onView(withContentDescription("Cancel vault item")).check(matches(isDisplayed()));
+        onView(withContentDescription("Save vault item")).inRoot(isDialog()).check(matches(isDisplayed()));
+        onView(withContentDescription("Cancel vault item")).inRoot(isDialog()).check(matches(isDisplayed()));
     }
 
     @Test

@@ -205,6 +205,13 @@ jobs:
           echo "=== Run complete Android instrumentation suite ==="
           gradle :app:connectedDebugAndroidTest --stacktrace
 
+
+          # connectedDebugAndroidTest can uninstall the target app during cleanup.
+          # Reinstall the already-built debug APK before screenshot verification.
+          echo "=== Reinstall debug APK after instrumentation cleanup ==="
+          adb install -r app/build/outputs/apk/debug/app-debug.apk
+          adb shell pm path "$PACKAGE" >/dev/null
+
           echo "=== Reset app before screenshot verification ==="
           adb shell pm clear "$PACKAGE" || true
           adb shell input keyevent KEYCODE_WAKEUP || true
@@ -320,12 +327,38 @@ jobs:
           adb shell cmd fingerprint sync || true
 
           echo "=== Enable biometric unlock through the real Keepriva UI ==="
+
+          # Keep the app installed after biometric verification so the resulting
+          # biometric-enabled state can be captured in a genuine screenshot.
+          adb install -r app/build/outputs/apk/debug/app-debug.apk
+
+          TEST_APK="$(find app/build/outputs/apk/androidTest -type f -name '*androidTest*.apk' | head -n 1)"
+          if [ -z "$TEST_APK" ] || [ ! -f "$TEST_APK" ]; then
+            echo "ERROR: androidTest APK was not found after the main instrumentation run."
+            exit 1
+          fi
+
+          adb install -r "$TEST_APK"
+
+          INSTRUMENTATION="$(adb shell pm list instrumentation \
+            | tr -d '\r' \
+            | grep "$PACKAGE" \
+            | head -n 1 \
+            | sed -E 's/^instrumentation:([^ ]+).*$/\1/')"
+
+          if [ -z "$INSTRUMENTATION" ]; then
+            echo "ERROR: Keepriva test instrumentation runner was not registered."
+            adb shell pm list instrumentation || true
+            exit 1
+          fi
+
+          echo "Using instrumentation: $INSTRUMENTATION"
+
           set +e
-          gradle \
-            :app:connectedDebugAndroidTest \
-            -Pandroid.testInstrumentationRunnerArguments.class=com.example.privatevault.KeeprivaBiometricCiTest \
-            -Pandroid.testInstrumentationRunnerArguments.keeprivaBiometricCi=1 \
-            --stacktrace \
+          adb shell am instrument -w -r \
+            -e class com.example.privatevault.KeeprivaBiometricCiTest \
+            -e keeprivaBiometricCi 1 \
+            "$INSTRUMENTATION" \
             > ci-biometric-test.log 2>&1 &
           BIO_TEST_PID=$!
 
@@ -336,9 +369,7 @@ jobs:
 
           wait "$BIO_TEST_PID"
           BIO_RESULT=$?
-          set -e
-
-          cp ci-biometric-test.log ci-artifacts/logs/biometric-test.log || true
+          set -e          cp ci-biometric-test.log ci-artifacts/logs/biometric-test.log || true
 
           if [ "$BIO_RESULT" -ne 0 ]; then
             echo "ERROR: real Keepriva biometric verification did not complete."

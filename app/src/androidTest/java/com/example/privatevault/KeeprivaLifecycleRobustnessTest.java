@@ -67,8 +67,17 @@ public class KeeprivaLifecycleRobustnessTest extends KeeprivaTestBase {
     public void cancelSecurityReauth_returnsToUsableHome() {
         createTestVault();
 
-        onView(withText("Security")).perform(androidx.test.espresso.action.ViewActions.scrollTo(), click());
-        cancelItemEditor();
+        onView(withText("Security"))
+                .perform(androidx.test.espresso.action.ViewActions.scrollTo(), click());
+
+        // This is the Security re-authentication dialog, not the vault-item editor.
+        // Target its own dialog-local Cancel button, then wait until MainActivity
+        // has regained focus before asserting the home screen.
+        onView(withText("Cancel"))
+                .inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
+                .perform(click());
+
+        waitForActivityWindowFocus();
 
         onView(withHint("Search title, username, phone, website or notes"))
                 .check(matches(isDisplayed()));

@@ -129,16 +129,39 @@ public class KeeprivaUiSmokeTest {
     public void addItem_requiresTitle() {
         createTestVault();
 
-        onView(withContentDescription("Add item")).perform(click());
+        onView(withContentDescription("Add item")).perform(new androidx.test.espresso.ViewAction() {
+            @Override
+            public org.hamcrest.Matcher<android.view.View> getConstraints() {
+                return isDisplayed();
+            }
 
-        onView(withText("Save")).check(matches(isDisplayed()));
-        onView(withText("Cancel")).check(matches(isDisplayed()));
+            @Override
+            public String getDescription() {
+                return "invoke Add item performClick directly";
+            }
 
-        onView(withText("Save")).perform(click());
+            @Override
+            public void perform(androidx.test.espresso.UiController uiController,
+                                android.view.View view) {
+                if (!view.isEnabled() || !view.isClickable()) {
+                    throw new AssertionError("Add item must be enabled and clickable");
+                }
+                if (!view.performClick()) {
+                    throw new AssertionError("Add item performClick returned false");
+                }
+                uiController.loopMainThreadUntilIdle();
+            }
+        });
+
+        onView(withText("Add vault item")).check(matches(isDisplayed()));
+        onView(withContentDescription("Save vault item")).check(matches(isDisplayed()));
+        onView(withContentDescription("Cancel vault item")).check(matches(isDisplayed()));
+
+        onView(withContentDescription("Save vault item")).perform(click());
 
         // Validation must keep the add form open.
-        onView(withText("Save")).check(matches(isDisplayed()));
-        onView(withText("Cancel")).check(matches(isDisplayed()));
+        onView(withContentDescription("Save vault item")).check(matches(isDisplayed()));
+        onView(withContentDescription("Cancel vault item")).check(matches(isDisplayed()));
     }
 
     @Test

@@ -26,7 +26,7 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
         createTestVault();
         openAddItem();
 
-        onView(withText("Save")).check(matches(isDisplayed()));
+        onView(withContentDescription("Save vault item")).check(matches(isDisplayed()));
         onView(withText("Cancel")).check(matches(isDisplayed()));
     }
 
@@ -35,9 +35,9 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
         createTestVault();
         openAddItem();
 
-        onView(withText("Save")).perform(click());
+        onView(withContentDescription("Save vault item")).perform(click());
 
-        onView(withText("Save")).check(matches(isDisplayed()));
+        onView(withContentDescription("Save vault item")).check(matches(isDisplayed()));
     }
 
     @Test
@@ -45,7 +45,7 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
         createTestVault();
         openAddItem();
 
-        onView(withText("Cancel")).perform(click());
+        onView(withContentDescription("Cancel vault item")).perform(click());
 
         onView(withText("No items yet. Tap + to add your first credential or note."))
                 .check(matches(isDisplayed()));

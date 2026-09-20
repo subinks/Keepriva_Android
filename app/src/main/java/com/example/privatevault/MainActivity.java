@@ -1257,26 +1257,31 @@ public class MainActivity extends Activity {
                 this, "Transfer, back up, configure and secure Keepriva."));
 
         toolsCard.addView(homeToolRow(
+                R.drawable.ic_keepriva_import,
                 "Import",
                 "Bulk import credentials from Keepriva JSON",
                 v -> showImportDialog()), matchWidth());
 
         toolsCard.addView(homeToolRow(
+                R.drawable.ic_keepriva_export,
                 "Export",
                 "Export the currently selected category",
                 v -> exportSelectedCategory()), matchWidth());
 
         toolsCard.addView(homeToolRow(
+                R.drawable.ic_keepriva_backup,
                 "Backup & Restore",
                 "Encrypted .pvault backup and recovery",
                 v -> showBackupRestoreDialog()), matchWidth());
 
         toolsCard.addView(homeToolRow(
+                R.drawable.ic_keepriva_settings,
                 "Preferences",
                 "Category nesting and app preferences",
                 v -> showPreferencesDialog()), matchWidth());
 
         toolsCard.addView(homeToolRow(
+                R.drawable.ic_keepriva_security,
                 "Security",
                 "Master password, biometrics and lock settings",
                 v -> requestMasterPasswordReauth(
@@ -1322,7 +1327,12 @@ public class MainActivity extends Activity {
         loadItems();
     }
 
-    private View homeToolRow(String title, String description, View.OnClickListener action) {
+    private View homeToolRow(
+            int iconRes,
+            String title,
+            String description,
+            View.OnClickListener action) {
+
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
@@ -1332,15 +1342,16 @@ public class MainActivity extends Activity {
         row.setClickable(true);
         row.setFocusable(true);
         row.setOnClickListener(action);
+        row.setContentDescription(title);
 
-        TextView icon = new TextView(this);
-        icon.setText("•");
-        icon.setTextSize(26);
-        icon.setGravity(Gravity.CENTER);
-        icon.setTextColor(getColor(R.color.keepriva_primary));
-        icon.setBackground(UiStyle.rounded(this, R.color.keepriva_surface_soft, 18));
+        ImageView icon = new ImageView(this);
+        icon.setImageResource(iconRes);
+        icon.setPadding(dp(8), dp(8), dp(8), dp(8));
+        icon.setBackground(UiStyle.rounded(
+                this, R.color.keepriva_surface_soft, 20));
+
         LinearLayout.LayoutParams iconParams =
-                new LinearLayout.LayoutParams(dp(38), dp(38));
+                new LinearLayout.LayoutParams(dp(42), dp(42));
         iconParams.rightMargin = dp(12);
         row.addView(icon, iconParams);
 
@@ -1376,7 +1387,6 @@ public class MainActivity extends Activity {
 
         return row;
     }
-
     private void addHomeCustomCategoryChildren(
             LinearLayout container,
             String parentName,
@@ -1431,15 +1441,14 @@ public class MainActivity extends Activity {
         row.setFocusable(true);
         row.setContentDescription("Open category " + label);
 
-        TextView icon = new TextView(this);
-        icon.setText(depth == 0 ? "▣" : "└");
-        icon.setTextSize(depth == 0 ? 20 : 18);
-        icon.setGravity(Gravity.CENTER);
-        icon.setTextColor(getColor(R.color.keepriva_primary_dark));
-        icon.setBackground(UiStyle.rounded(this, R.color.keepriva_surface_soft, 18));
+        ImageView icon = new ImageView(this);
+        icon.setImageResource(categoryIconFor(categoryName, allCategories));
+        icon.setPadding(dp(7), dp(7), dp(7), dp(7));
+        icon.setBackground(UiStyle.rounded(
+                this, R.color.keepriva_surface_soft, 20));
 
         LinearLayout.LayoutParams iconParams =
-                new LinearLayout.LayoutParams(dp(38), dp(38));
+                new LinearLayout.LayoutParams(dp(42), dp(42));
         iconParams.rightMargin = dp(12);
         row.addView(icon, iconParams);
 
@@ -1482,6 +1491,18 @@ public class MainActivity extends Activity {
         container.addView(indent, lp);
     }
 
+    private int categoryIconFor(String categoryName, boolean allCategories) {
+        if (allCategories) return R.drawable.ic_keepriva_folder;
+
+        String category = safe(categoryName).trim().toLowerCase(Locale.ROOT);
+
+        if ("login".equals(category)) return R.drawable.ic_keepriva_key;
+        if ("banking".equals(category)) return R.drawable.ic_keepriva_card;
+        if ("secure note".equals(category)) return R.drawable.ic_keepriva_note;
+        if ("contact".equals(category)) return R.drawable.ic_keepriva_contact;
+
+        return R.drawable.ic_keepriva_folder;
+    }
     private int countItemsForCategory(String categoryName) {
         if ("All".equals(categoryName)) return allItems == null ? 0 : allItems.size();
 

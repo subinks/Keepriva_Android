@@ -104,6 +104,7 @@ public class MainActivity extends Activity {
     private boolean explicitlyLocked = true;
     private ClipboardSecurityManager clipboardSecurity;
     private boolean systemPickerInProgress = false;
+    private long systemPickerStartedAt = 0L;
     private boolean screenOffReceiverRegistered = false;
     private final BroadcastReceiver screenOffReceiver = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) {
@@ -755,11 +756,19 @@ public class MainActivity extends Activity {
         root.addView(status);
 
         Button changePassword = button("Change master password");
-        changePassword.setOnClickListener(v -> showChangeMasterPasswordDialog());
+        changePassword.setOnClickListener(v -> {
+            AlertDialog parentDialog = findShowingDialogForView(v);
+            if (parentDialog != null) parentDialog.dismiss();
+            showChangeMasterPasswordDialog();
+        });
         root.addView(changePassword);
 
         Button autoLock = button("Auto-lock: " + autoLockLabel(getAutoLockMs()));
-        autoLock.setOnClickListener(v -> showAutoLockSettings());
+        autoLock.setOnClickListener(v -> {
+            AlertDialog parentDialog = findShowingDialogForView(v);
+            if (parentDialog != null) parentDialog.dismiss();
+            showAutoLockSettings();
+        });
         root.addView(autoLock);
 
         CheckBox screenOff = new CheckBox(this);
@@ -770,11 +779,19 @@ public class MainActivity extends Activity {
         root.addView(screenOff);
 
         Button biometric = button(isBiometricUnlockConfigured() ? "Biometric unlock: Enabled" : "Biometric unlock: Disabled");
-        biometric.setOnClickListener(v -> showBiometricSettings());
+        biometric.setOnClickListener(v -> {
+            AlertDialog parentDialog = findShowingDialogForView(v);
+            if (parentDialog != null) parentDialog.dismiss();
+            showBiometricSettings();
+        });
         root.addView(biometric);
 
         Button clipboard = button("Clipboard timeout: " + clipboardTimeoutLabel(getClipboardTimeoutMs()));
-        clipboard.setOnClickListener(v -> showClipboardSettings());
+        clipboard.setOnClickListener(v -> {
+            AlertDialog parentDialog = findShowingDialogForView(v);
+            if (parentDialog != null) parentDialog.dismiss();
+            showClipboardSettings();
+        });
         root.addView(clipboard);
 
         AlertDialog dialog = new AlertDialog.Builder(this)
@@ -782,6 +799,7 @@ public class MainActivity extends Activity {
                 .setView(root)
                 .setPositiveButton("Done", (d, w) -> showVaultScreen())
                 .create();
+        root.setTag(dialog);
         ScreenSecurityManager.protect(dialog);
         dialog.show();
     }
@@ -792,18 +810,40 @@ public class MainActivity extends Activity {
         long current = getAutoLockMs();
         int selected = 1;
         for (int i = 0; i < values.length; i++) if (values[i] == current) selected = i;
-        final int[] choice = {selected};
+
+        LinearLayout box = baseVertical(6);
+        box.addView(subtitle("Keepriva locks after it has been left in the background for this long."));
+
+        android.widget.RadioGroup group = new android.widget.RadioGroup(this);
+        group.setOrientation(android.widget.RadioGroup.VERTICAL);
+        for (int i = 0; i < labels.length; i++) {
+            android.widget.RadioButton rb = new android.widget.RadioButton(this);
+            rb.setId(View.generateViewId());
+            rb.setText(labels[i]);
+            rb.setTag(i);
+            group.addView(rb);
+            if (i == selected) group.check(rb.getId());
+        }
+        box.addView(group);
+
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("Auto-lock")
-                .setMessage("Keepriva locks after it has been left in the background for this long.")
-                .setSingleChoiceItems(labels, selected, (d, which) -> choice[0] = which)
-                .setPositiveButton("Save", (d, w) -> {
-                    getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                            .putLong(PREF_AUTO_LOCK_MS, values[choice[0]]).apply();
-                    toast("Auto-lock: " + labels[choice[0]]);
-                })
+                .setView(box)
+                .setPositiveButton("Save", null)
                 .setNegativeButton("Cancel", null)
                 .create();
+
+        dialog.setOnShowListener(v -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(btn -> {
+            int checkedId = group.getCheckedRadioButtonId();
+            View checked = group.findViewById(checkedId);
+            if (checked == null || checked.getTag() == null) return;
+            int which = (Integer) checked.getTag();
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                    .putLong(PREF_AUTO_LOCK_MS, values[which]).apply();
+            dialog.dismiss();
+            toast("Auto-lock: " + labels[which]);
+        }));
+
         ScreenSecurityManager.protect(dialog);
         dialog.show();
     }
@@ -897,20 +937,41 @@ public class MainActivity extends Activity {
         int selected = 1;
         for (int i = 0; i < values.length; i++) if (values[i] == current) selected = i;
 
-        final int[] choice = {selected};
-        new AlertDialog.Builder(this)
+        LinearLayout box = baseVertical(6);
+        box.addView(subtitle("Copied passwords are marked sensitive. Keepriva can also clear a copied password after a short delay. 'Never' is less secure."));
+
+        android.widget.RadioGroup group = new android.widget.RadioGroup(this);
+        group.setOrientation(android.widget.RadioGroup.VERTICAL);
+        for (int i = 0; i < labels.length; i++) {
+            android.widget.RadioButton rb = new android.widget.RadioButton(this);
+            rb.setId(View.generateViewId());
+            rb.setText(labels[i]);
+            rb.setTag(i);
+            group.addView(rb);
+            if (i == selected) group.check(rb.getId());
+        }
+        box.addView(group);
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("Password clipboard timeout")
-                .setMessage("Copied passwords are marked sensitive. Keepriva can also clear a copied password after a short delay. 'Never' is less secure.")
-                .setSingleChoiceItems(labels, selected, (d, which) -> choice[0] = which)
-                .setPositiveButton("Save", (d, w) -> {
-                    getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                            .putLong(PREF_CLIPBOARD_TIMEOUT_MS, values[choice[0]])
-                            .apply();
-                    toast("Clipboard timeout: " + labels[choice[0]]);
-                    showVaultScreen();
-                })
+                .setView(box)
+                .setPositiveButton("Save", null)
                 .setNegativeButton("Cancel", null)
-                .show();
+                .create();
+
+        dialog.setOnShowListener(v -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(btn -> {
+            int checkedId = group.getCheckedRadioButtonId();
+            View checked = group.findViewById(checkedId);
+            if (checked == null || checked.getTag() == null) return;
+            int which = (Integer) checked.getTag();
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                    .putLong(PREF_CLIPBOARD_TIMEOUT_MS, values[which]).apply();
+            dialog.dismiss();
+            toast("Clipboard timeout: " + labels[which]);
+        }));
+
+        ScreenSecurityManager.protect(dialog);
+        dialog.show();
     }
 
     private void copyPasswordToClipboard(String password) {
@@ -1014,10 +1075,11 @@ public class MainActivity extends Activity {
         sessionKey = null;
         allItems.clear();
         customCategories.clear();
-        pendingExportBytes = null;
-        pendingExportMime = null;
-        pendingTemplateBytes = null;
-        pendingBackupBytes = null;
+        clearPendingExportData();
+        clearPendingTemplateData();
+        clearPendingBackupData();
+        systemPickerInProgress = false;
+        systemPickerStartedAt = 0L;
     }
 
     private void loadItems() {
@@ -1108,8 +1170,18 @@ public class MainActivity extends Activity {
         }
 
         if (item.customFields != null) {
-            for (Map.Entry<String, String> e : item.customFields.entrySet())
-                addNonEmptyLabelValue(body, e.getKey(), e.getValue());
+            CustomCategory itemCustomCategory = findCustomCategory(item.category);
+            java.util.Set<String> sensitiveNames = itemCustomCategory == null
+                    ? java.util.Collections.emptySet()
+                    : new java.util.HashSet<>(itemCustomCategory.sensitiveFields);
+
+            for (Map.Entry<String, String> e : item.customFields.entrySet()) {
+                if (sensitiveNames.contains(e.getKey())) {
+                    addSensitiveCustomField(body, e.getKey(), e.getValue());
+                } else {
+                    addNonEmptyLabelValue(body, e.getKey(), e.getValue());
+                }
+            }
         }
 
         Button exportEntry = button("Export this entry");
@@ -1508,23 +1580,36 @@ public class MainActivity extends Activity {
             name.setTextSize(15);
             row.addView(name, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
             Button edit = button("Edit / Move");
-            edit.setOnClickListener(v -> showCustomCategoryEditor(c));
+            edit.setOnClickListener(v -> {
+                AlertDialog parentDialog = findShowingDialogForView(v);
+                if (parentDialog != null) parentDialog.dismiss();
+                showCustomCategoryEditor(c);
+            });
             row.addView(edit);
             Button del = button("Delete");
             UiStyle.styleDangerButton(del);
-            del.setOnClickListener(v -> deleteCustomCategory(c));
+            del.setOnClickListener(v -> {
+                AlertDialog parentDialog = findShowingDialogForView(v);
+                if (parentDialog != null) parentDialog.dismiss();
+                deleteCustomCategory(c);
+            });
             row.addView(del);
             body.addView(row);
         }
         if (customCategories.isEmpty()) body.addView(subtitle("No custom categories yet."));
         Button add = button("+ New custom category / sub-category");
-        add.setOnClickListener(v -> showCustomCategoryEditor(null));
+        add.setOnClickListener(v -> {
+            AlertDialog parentDialog = findShowingDialogForView(v);
+            if (parentDialog != null) parentDialog.dismiss();
+            showCustomCategoryEditor(null);
+        });
         body.addView(add);
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("Categories")
                 .setView(wrap(body))
                 .setNegativeButton("Close", null)
                 .create();
+        body.setTag(dialog);
         ScreenSecurityManager.protect(dialog);
         dialog.show();
     }
@@ -1571,7 +1656,7 @@ public class MainActivity extends Activity {
         }
         parent.setSelection(parentIndex);
 
-        EditText fields = field("Field names - one per line", String.join("\n", model.fields));
+        EditText fields = field("Field names - one per line (optional for folder categories)", String.join("\n", model.fields));
         fields.setSingleLine(false); fields.setMinLines(7); fields.setGravity(Gravity.TOP);
         EditText sensitiveFields = field("Sensitive field names - one per line (optional)", String.join("\n", model.sensitiveFields));
         sensitiveFields.setSingleLine(false); sensitiveFields.setMinLines(4); sensitiveFields.setGravity(Gravity.TOP);
@@ -1608,7 +1693,8 @@ public class MainActivity extends Activity {
                 String f = line.trim();
                 if (!f.isEmpty() && !parsed.contains(f)) parsed.add(f);
             }
-            if (parsed.isEmpty()) { fields.setError("Add at least one field"); return; }
+            // A category may be used purely as an organizational parent/folder.
+            // Therefore zero custom fields is valid.
             List<String> parsedSensitive = new ArrayList<>();
             for (String line : sensitiveFields.getText().toString().split("\\r?\\n")) {
                 String f = line.trim();
@@ -1775,28 +1861,35 @@ public class MainActivity extends Activity {
     private void requireMasterPasswordForSensitiveExport(List<VaultItem> items, String suggestedName,
                                                          ExportManager.Options options) {
         EditText password = passwordField("Master password");
-        new AlertDialog.Builder(this)
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("Re-authentication required")
                 .setMessage("This export can contain passwords or fields you marked sensitive. Enter the master password again before creating the plaintext file.")
                 .setView(password)
-                .setPositiveButton("Authenticate", (d, w) -> {
-                    char[] chars = password.getText().toString().toCharArray();
-                    try {
-                        SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
-                        SecretKey verified = prefs.getInt(PREF_CRYPTO_VERSION, 0) >= CRYPTO_VERSION_2
-                                ? unlockV2(new String(chars), prefs)
-                                : unlockLegacyForVerification(new String(chars), prefs);
-                        if (verified == null) throw new GeneralSecurityException("Authentication failed");
-                        chooseExportFormat(items, suggestedName, options);
-                    } catch (Exception e) {
-                        toast("Authentication failed. Sensitive export cancelled.");
-                    } finally {
-                        java.util.Arrays.fill(chars, '\0');
-                        password.setText("");
-                    }
-                })
+                .setPositiveButton("Authenticate", null)
                 .setNegativeButton("Cancel", null)
-                .show();
+                .create();
+
+        dialog.setOnShowListener(v -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(btn -> {
+            char[] chars = password.getText().toString().toCharArray();
+            try {
+                SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+                SecretKey verified = prefs.getInt(PREF_CRYPTO_VERSION, 0) >= CRYPTO_VERSION_2
+                        ? unlockV2(new String(chars), prefs)
+                        : unlockLegacyForVerification(new String(chars), prefs);
+                if (verified == null) throw new GeneralSecurityException("Authentication failed");
+                dialog.dismiss();
+                chooseExportFormat(items, suggestedName, options);
+            } catch (Exception e) {
+                password.setError("Incorrect master password");
+                password.requestFocus();
+            } finally {
+                java.util.Arrays.fill(chars, '\0');
+                password.setText("");
+            }
+        }));
+
+        ScreenSecurityManager.protect(dialog);
+        dialog.show();
     }
 
     private SecretKey unlockLegacyForVerification(String password, SharedPreferences prefs) throws Exception {
@@ -1810,14 +1903,45 @@ public class MainActivity extends Activity {
     }
 
     private void chooseExportFormat(List<VaultItem> items, String suggestedName, ExportManager.Options options) {
-        String[] formats = {"Formatted text (.txt)", "HTML page (.html)", "PDF document (.pdf)"};
-        new AlertDialog.Builder(this)
-                .setTitle("Choose export format")
-                .setMessage(options.includePasswords || options.includeSensitiveCustomFields
+        LinearLayout box = baseVertical(8);
+
+        TextView warning = subtitle(
+                options.includePasswords || options.includeSensitiveCustomFields
                         ? "Sensitive values are enabled for this plaintext export. Store the file securely and delete it when no longer needed."
-                        : "Safe export: passwords and sensitive custom fields will be omitted.")
-                .setItems(formats, (d, which) -> prepareExport(items, suggestedName, which, options))
-                .setNegativeButton("Cancel", null).show();
+                        : "Safe export: passwords and sensitive custom fields will be omitted.");
+        box.addView(warning);
+
+        Button txt = button("Formatted text (.txt)");
+        Button html = button("HTML page (.html)");
+        Button pdf = button("PDF document (.pdf)");
+
+        box.addView(txt, matchWidth());
+        box.addView(html, matchWidth());
+        box.addView(pdf, matchWidth());
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("Choose export format")
+                .setView(box)
+                .setNegativeButton("Cancel", null)
+                .create();
+
+        txt.setOnClickListener(v -> {
+            dialog.dismiss();
+            prepareExport(items, suggestedName, 0, options);
+        });
+
+        html.setOnClickListener(v -> {
+            dialog.dismiss();
+            prepareExport(items, suggestedName, 1, options);
+        });
+
+        pdf.setOnClickListener(v -> {
+            dialog.dismiss();
+            prepareExport(items, suggestedName, 2, options);
+        });
+
+        ScreenSecurityManager.protect(dialog);
+        dialog.show();
     }
 
     private void prepareExport(List<VaultItem> items, String suggestedName, int format, ExportManager.Options options) {
@@ -1838,48 +1962,107 @@ public class MainActivity extends Activity {
             intent.addCategory(Intent.CATEGORY_OPENABLE);
             intent.setType(pendingExportMime);
             intent.putExtra(Intent.EXTRA_TITLE, filename);
-            systemPickerInProgress = true;
+            beginSystemPicker();
             startActivityForResult(intent, EXPORT_REQUEST);
         } catch (Exception e) { toast("Could not prepare export: " + e.getMessage()); }
     }
 
+    private void beginSystemPicker() {
+        systemPickerInProgress = true;
+        systemPickerStartedAt = System.currentTimeMillis();
+    }
+
+    private void clearPendingExportData() {
+        if (pendingExportBytes != null) java.util.Arrays.fill(pendingExportBytes, (byte) 0);
+        pendingExportBytes = null;
+        pendingExportMime = null;
+    }
+
+    private void clearPendingTemplateData() {
+        if (pendingTemplateBytes != null) java.util.Arrays.fill(pendingTemplateBytes, (byte) 0);
+        pendingTemplateBytes = null;
+    }
+
+    private void clearPendingBackupData() {
+        if (pendingBackupBytes != null) java.util.Arrays.fill(pendingBackupBytes, (byte) 0);
+        pendingBackupBytes = null;
+    }
+
+    private boolean shouldLockAfterPicker() {
+        if (sessionKey == null || systemPickerStartedAt <= 0L) return false;
+        long timeout = getAutoLockMs();
+        long elapsed = System.currentTimeMillis() - systemPickerStartedAt;
+        return timeout == AUTO_LOCK_IMMEDIATELY || elapsed >= timeout;
+    }
     private void showBackupRestoreDialog() {
-        String[] actions = {"Create encrypted .pvault backup", "Restore encrypted .pvault backup"};
-        new AlertDialog.Builder(this)
+        LinearLayout box = baseVertical(8);
+        box.addView(subtitle("Backups use a separate password and are portable to another phone. Keep the backup password safe: it is not recoverable by the app."));
+
+        Button create = button("Create encrypted .pvault backup");
+        Button restore = button("Restore encrypted .pvault backup");
+        box.addView(create, matchWidth());
+        box.addView(restore, matchWidth());
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("Encrypted backup & restore")
-                .setMessage("Backups use a separate password and are portable to another phone. Keep the backup password safe: it is not recoverable by the app.")
-                .setItems(actions, (d, which) -> {
-                    if (which == 0) promptCreateBackupPassword();
-                    else chooseBackupForRestore();
-                })
+                .setView(box)
                 .setNegativeButton("Cancel", null)
-                .show();
+                .create();
+
+        create.setOnClickListener(v -> {
+            dialog.dismiss();
+            promptCreateBackupPassword();
+        });
+        restore.setOnClickListener(v -> {
+            dialog.dismiss();
+            chooseBackupForRestore();
+        });
+
+        ScreenSecurityManager.protect(dialog);
+        dialog.show();
     }
 
     private void promptCreateBackupPassword() {
         LinearLayout box = baseVertical(8);
+        box.addView(subtitle("Use a password different from your phone unlock. The .pvault file contains an authenticated encrypted snapshot of entries and custom categories."));
         EditText pass = passwordField("Backup password (10+ characters)");
         EditText confirm = passwordField("Confirm backup password");
-        box.addView(pass); box.addView(confirm);
-        new AlertDialog.Builder(this)
+        box.addView(pass);
+        box.addView(confirm);
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("Create encrypted backup")
-                .setMessage("Use a password different from your phone unlock. The .pvault file contains an authenticated encrypted snapshot of entries and custom categories.")
                 .setView(box)
-                .setPositiveButton("Continue", (d, w) -> {
-                    char[] p1 = pass.getText().toString().toCharArray();
-                    char[] p2 = confirm.getText().toString().toCharArray();
-                    try {
-                        if (p1.length < 10) { toast("Backup password must be at least 10 characters."); return; }
-                        if (!java.util.Arrays.equals(p1, p2)) { toast("Backup passwords do not match."); return; }
-                        createEncryptedBackup(p1);
-                    } finally {
-                        java.util.Arrays.fill(p1, '\0');
-                        java.util.Arrays.fill(p2, '\0');
-                        pass.setText(""); confirm.setText("");
-                    }
-                })
+                .setPositiveButton("Continue", null)
                 .setNegativeButton("Cancel", null)
-                .show();
+                .create();
+
+        dialog.setOnShowListener(v -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(btn -> {
+            char[] p1 = pass.getText().toString().toCharArray();
+            char[] p2 = confirm.getText().toString().toCharArray();
+            try {
+                if (p1.length < 10) {
+                    pass.setError("Use at least 10 characters");
+                    pass.requestFocus();
+                    return;
+                }
+                if (!java.util.Arrays.equals(p1, p2)) {
+                    confirm.setError("Passwords do not match");
+                    confirm.requestFocus();
+                    return;
+                }
+                dialog.dismiss();
+                createEncryptedBackup(p1);
+            } finally {
+                java.util.Arrays.fill(p1, '\0');
+                java.util.Arrays.fill(p2, '\0');
+                pass.setText("");
+                confirm.setText("");
+            }
+        }));
+
+        ScreenSecurityManager.protect(dialog);
+        dialog.show();
     }
 
     private void createEncryptedBackup(char[] backupPassword) {
@@ -1893,7 +2076,7 @@ public class MainActivity extends Activity {
             intent.addCategory(Intent.CATEGORY_OPENABLE);
             intent.setType("application/octet-stream");
             intent.putExtra(Intent.EXTRA_TITLE, "Keepriva-backup.pvault");
-            systemPickerInProgress = true;
+            beginSystemPicker();
             startActivityForResult(intent, BACKUP_EXPORT_REQUEST);
         } catch (Exception e) {
             pendingBackupBytes = null;
@@ -1918,26 +2101,39 @@ public class MainActivity extends Activity {
 
     private void promptRestorePassword(byte[] backupBytes) {
         EditText pass = passwordField("Backup password");
-        new AlertDialog.Builder(this)
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("Unlock backup")
                 .setMessage("The backup is authenticated before any vault data is changed.")
                 .setView(pass)
-                .setPositiveButton("Validate", (d, w) -> {
-                    char[] password = pass.getText().toString().toCharArray();
-                    try {
-                        BackupManager.RestoredBackup restored = BackupManager.decryptAndValidate(backupBytes, password);
-                        showRestorePreview(restored);
-                    } catch (Exception e) {
-                        toast("Backup password is incorrect, or the backup is damaged/unsupported.");
-                    } finally {
-                        java.util.Arrays.fill(password, '\0');
-                        java.util.Arrays.fill(backupBytes, (byte) 0);
-                        pass.setText("");
-                    }
-                })
-                .setNegativeButton("Cancel", (d,w) -> java.util.Arrays.fill(backupBytes, (byte) 0))
-                .setOnCancelListener(d -> java.util.Arrays.fill(backupBytes, (byte) 0))
-                .show();
+                .setPositiveButton("Validate", null)
+                .setNegativeButton("Cancel", null)
+                .create();
+
+        dialog.setOnShowListener(v -> {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(btn -> {
+                char[] password = pass.getText().toString().toCharArray();
+                try {
+                    BackupManager.RestoredBackup restored = BackupManager.decryptAndValidate(backupBytes, password);
+                    dialog.dismiss();
+                    java.util.Arrays.fill(backupBytes, (byte) 0);
+                    showRestorePreview(restored);
+                } catch (Exception e) {
+                    pass.setError("Incorrect password or damaged/unsupported backup");
+                    pass.requestFocus();
+                } finally {
+                    java.util.Arrays.fill(password, '\0');
+                    pass.setText("");
+                }
+            });
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener(btn -> {
+                java.util.Arrays.fill(backupBytes, (byte) 0);
+                dialog.dismiss();
+            });
+        });
+        dialog.setOnCancelListener(d -> java.util.Arrays.fill(backupBytes, (byte) 0));
+
+        ScreenSecurityManager.protect(dialog);
+        dialog.show();
     }
 
     private void showRestorePreview(BackupManager.RestoredBackup restored) {
@@ -1980,16 +2176,31 @@ public class MainActivity extends Activity {
     }
 
     private void showImportDialog() {
-        String[] actions = {"Download JSON import template", "Import filled JSON template"};
-        new AlertDialog.Builder(this)
+        LinearLayout box = baseVertical(8);
+        box.addView(subtitle("The template file itself is not encrypted. If you put passwords or other secrets in it, store it securely and delete it after import. Imported vault records are encrypted before SQLite storage."));
+
+        Button download = button("Download JSON import template");
+        Button importFile = button("Import filled JSON template");
+        box.addView(download, matchWidth());
+        box.addView(importFile, matchWidth());
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("Import")
-                .setMessage("The template file itself is not encrypted. If you put passwords or other secrets in it, store it securely and delete it after import. Imported vault records are encrypted before SQLite storage.")
-                .setItems(actions, (d, which) -> {
-                    if (which == 0) downloadImportTemplate();
-                    else chooseImportTemplate();
-                })
+                .setView(box)
                 .setNegativeButton("Cancel", null)
-                .show();
+                .create();
+
+        download.setOnClickListener(v -> {
+            dialog.dismiss();
+            downloadImportTemplate();
+        });
+        importFile.setOnClickListener(v -> {
+            dialog.dismiss();
+            chooseImportTemplate();
+        });
+
+        ScreenSecurityManager.protect(dialog);
+        dialog.show();
     }
 
     private void downloadImportTemplate() {
@@ -1999,7 +2210,7 @@ public class MainActivity extends Activity {
             intent.addCategory(Intent.CATEGORY_OPENABLE);
             intent.setType("application/json");
             intent.putExtra(Intent.EXTRA_TITLE, "Keepriva-import-template.json");
-            systemPickerInProgress = true;
+            beginSystemPicker();
             startActivityForResult(intent, TEMPLATE_EXPORT_REQUEST);
         } catch (Exception e) { toast("Could not create import template: " + e.getMessage()); }
     }
@@ -2081,44 +2292,77 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+
+        boolean lockAfterPicker = shouldLockAfterPicker();
         systemPickerInProgress = false;
+        systemPickerStartedAt = 0L;
         backgroundAt = 0L;
-        if (resultCode != RESULT_OK || data == null || data.getData() == null) return;
+
+        if (resultCode != RESULT_OK || data == null || data.getData() == null) {
+            if (requestCode == EXPORT_REQUEST) clearPendingExportData();
+            else if (requestCode == TEMPLATE_EXPORT_REQUEST) clearPendingTemplateData();
+            else if (requestCode == BACKUP_EXPORT_REQUEST) clearPendingBackupData();
+
+            if (lockAfterPicker) lockVault();
+            return;
+        }
+
         Uri uri = data.getData();
+
         if (requestCode == EXPORT_REQUEST) {
             try (OutputStream out = getContentResolver().openOutputStream(uri)) {
                 if (out == null) throw new IllegalStateException("Cannot open selected file");
-                out.write(pendingExportBytes); out.flush();
+                if (pendingExportBytes == null) throw new IllegalStateException("Export data is unavailable");
+                out.write(pendingExportBytes);
+                out.flush();
                 toast("Export saved.");
-            } catch (Exception e) { toast("Export failed: " + e.getMessage()); }
-            finally { pendingExportBytes = null; pendingExportMime = null; }
+            } catch (Exception e) {
+                toast("Export failed: " + e.getMessage());
+            } finally {
+                clearPendingExportData();
+            }
         } else if (requestCode == TEMPLATE_EXPORT_REQUEST) {
             try (OutputStream out = getContentResolver().openOutputStream(uri)) {
                 if (out == null) throw new IllegalStateException("Cannot open selected file");
-                out.write(pendingTemplateBytes); out.flush();
+                if (pendingTemplateBytes == null) throw new IllegalStateException("Template data is unavailable");
+                out.write(pendingTemplateBytes);
+                out.flush();
                 toast("Import template saved.");
-            } catch (Exception e) { toast("Template save failed: " + e.getMessage()); }
-            finally { pendingTemplateBytes = null; }
+            } catch (Exception e) {
+                toast("Template save failed: " + e.getMessage());
+            } finally {
+                clearPendingTemplateData();
+            }
         } else if (requestCode == IMPORT_REQUEST) {
-            try { previewImport(readUtf8(uri)); }
-            catch (Exception e) { toast("Could not read import file: " + e.getMessage()); }
+            try {
+                previewImport(readUtf8(uri));
+            } catch (Exception e) {
+                toast("Could not read import file: " + e.getMessage());
+            }
         } else if (requestCode == BACKUP_EXPORT_REQUEST) {
             try (OutputStream out = getContentResolver().openOutputStream(uri)) {
                 if (out == null) throw new IllegalStateException("Cannot open selected file");
                 if (pendingBackupBytes == null) throw new IllegalStateException("Backup data is unavailable");
-                out.write(pendingBackupBytes); out.flush();
+                out.write(pendingBackupBytes);
+                out.flush();
                 toast("Encrypted .pvault backup saved.");
-            } catch (Exception e) { toast("Backup save failed: " + e.getMessage()); }
-            finally {
-                if (pendingBackupBytes != null) java.util.Arrays.fill(pendingBackupBytes, (byte) 0);
-                pendingBackupBytes = null;
+            } catch (Exception e) {
+                toast("Backup save failed: " + e.getMessage());
+            } finally {
+                clearPendingBackupData();
             }
         } else if (requestCode == BACKUP_RESTORE_REQUEST) {
-            try { promptRestorePassword(readBytes(uri)); }
-            catch (Exception e) { toast("Could not read backup file: " + e.getMessage()); }
+            try {
+                promptRestorePassword(readBytes(uri));
+            } catch (Exception e) {
+                toast("Could not read backup file: " + e.getMessage());
+            }
+        }
+
+        if (lockAfterPicker && requestCode != BACKUP_RESTORE_REQUEST) {
+            lockVault();
         }
     }
-
     private String sanitizeFileName(String value) {
         String s = safe(value).trim().replaceAll("[\\\\/:*?\"<>|]", "_");
         return s.isEmpty() ? "Keepriva-export" : s;
@@ -2181,6 +2425,47 @@ public class MainActivity extends Activity {
     private void addNonEmptyLabelValue(LinearLayout body, String label, String value) {
         if (value != null && !value.trim().isEmpty()) addLabelValue(body, label, value);
     }
+    private void addSensitiveCustomField(LinearLayout body, String label, String value) {
+        if (value == null || value.trim().isEmpty()) return;
+
+        body.addView(boldLabel(label + " (sensitive)"));
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView display = new TextView(this);
+        display.setText("••••••••••••");
+        display.setTextSize(17);
+        display.setPadding(0, dp(4), dp(8), dp(8));
+        UiStyle.styleBodyText(display);
+        row.addView(display, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+
+        final boolean[] visible = {false};
+        Button show = button("Show");
+        show.setOnClickListener(v -> {
+            visible[0] = !visible[0];
+            display.setText(visible[0] ? value : "••••••••••••");
+            show.setText(visible[0] ? "Hide" : "Show");
+        });
+        row.addView(show);
+
+        Button copy = button("Copy");
+        copy.setContentDescription("Copy sensitive field securely");
+        copy.setOnClickListener(v -> copySensitiveCustomFieldToClipboard(value));
+        row.addView(copy);
+
+        body.addView(row);
+    }
+
+    private void copySensitiveCustomFieldToClipboard(String value) {
+        if (value == null || value.isEmpty()) return;
+        long timeout = getClipboardTimeoutMs();
+        clipboardSecurity.copySensitive("Keepriva sensitive field", value, timeout);
+        toast(timeout == ClipboardSecurityManager.NEVER_CLEAR
+                ? "Sensitive field copied. Clipboard auto-clear is disabled."
+                : "Sensitive field copied. It will be cleared in " + (timeout / 1000L) + " seconds.");
+    }
 
     private EditText field(String hint, String value) {
         EditText e = new EditText(this);
@@ -2218,9 +2503,26 @@ public class MainActivity extends Activity {
         return new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
     }
 
+    private AlertDialog findShowingDialogForView(View view) {
+        View current = view;
+        while (current != null) {
+            Object tag = current.getTag();
+            if (tag instanceof AlertDialog) {
+                AlertDialog dialog = (AlertDialog) tag;
+                if (dialog.isShowing()) return dialog;
+            }
+            android.view.ViewParent parent = current.getParent();
+            current = parent instanceof View ? (View) parent : null;
+        }
+        return null;
+    }
     private int dp(int v) { return Math.round(v * getResources().getDisplayMetrics().density); }
     private void toast(String s) { Toast.makeText(this, s, Toast.LENGTH_LONG).show(); }
     private static String safe(String s) { return s == null ? "" : s; }
 }
+
+
+
+
 
 

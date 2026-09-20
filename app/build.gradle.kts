@@ -55,6 +55,7 @@ android {
         targetSdk = 36
         versionCode = 16
         versionName = "2.1.0-alpha1"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildFeatures {
@@ -129,4 +130,11 @@ tasks.register("verifyReleaseHardening") {
             println("Release hardening verified. No signing secrets supplied to this Gradle invocation; use Android Studio's signed-build wizard or provide PV_* secrets for automated signing.")
         }
     }
+}
+
+dependencies {
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:rules:1.6.1")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
 }

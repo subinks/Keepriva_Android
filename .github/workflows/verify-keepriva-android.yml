@@ -189,8 +189,15 @@ jobs:
 
           adb install -r app/build/outputs/apk/debug/app-debug.apk
 
-          adb shell monkey -p com.example.privatevault.debug -c android.intent.category.LAUNCHER 1
+          # Launch Keepriva directly instead of going through Pixel Launcher.
+          # This avoids launcher ANR dialogs interfering with UI verification.
+          adb shell am force-stop com.example.privatevault.debug || true
+          adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS || true
+          adb shell am start -W -n com.example.privatevault.debug/com.example.privatevault.MainActivity
           sleep 4
+
+          echo "=== Foreground activity after direct launch ==="
+          adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' || true
 
           adb exec-out screencap -p > ci-artifacts/screenshots/01-fresh-install-setup.png
           adb shell uiautomator dump /sdcard/keepriva-ui.xml || true
@@ -269,8 +276,9 @@ jobs:
 
           adb shell am force-stop com.example.privatevault.debug
           sleep 1
+          adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS || true
 
-          adb shell monkey -p com.example.privatevault.debug -c android.intent.category.LAUNCHER 1
+          adb shell am start -W -n com.example.privatevault.debug/com.example.privatevault.MainActivity
           sleep 4
 
           adb exec-out screencap -p > ci-artifacts/screenshots/03-real-unlock-screen.png

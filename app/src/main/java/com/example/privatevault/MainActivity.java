@@ -98,6 +98,8 @@ public class MainActivity extends Activity {
     private LinearLayout listContainer;
     private EditText searchBox;
     private Spinner categoryFilter;
+    private ScrollView homeScroll;
+    private TextView homeEntriesHeading;
     private List<VaultItem> allItems = new ArrayList<>();
     private List<CustomCategory> customCategories = new ArrayList<>();
     private byte[] pendingExportBytes;
@@ -1136,6 +1138,11 @@ public class MainActivity extends Activity {
         sessionKey = null;
         allItems.clear();
         customCategories.clear();
+        listContainer = null;
+        searchBox = null;
+        categoryFilter = null;
+        homeScroll = null;
+        homeEntriesHeading = null;
         clearPendingExportData();
         clearPendingTemplateData();
         clearPendingBackupData();
@@ -1186,9 +1193,11 @@ public class MainActivity extends Activity {
 
         try {
             customCategories = database.listCustomCategories(sessionKey);
+            allItems = database.list(sessionKey);
         } catch (Exception e) {
-            toast("Could not load custom categories.");
-            customCategories = new ArrayList<>();
+            toast("Could not decrypt vault. Locking for safety.");
+            lockVault();
+            return;
         }
 
         LinearLayout outer = baseVertical(14);
@@ -1306,8 +1315,25 @@ public class MainActivity extends Activity {
         categoryParams.topMargin = dp(12);
         outer.addView(categoryCard, categoryParams);
 
-        // Secondary management actions are shown as a calm vertical list instead
-        // of a horizontal row or 2-column button grid.
+        // Primary vault content belongs directly below category navigation.
+        // Previously entries were rendered after the entire Vault tools section,
+        // which made category selection and search appear to do nothing.
+        Button addItem = primaryButton("+  Add item");
+        addItem.setContentDescription("Add item");
+        addItem.setOnClickListener(v -> showEditDialog(null));
+        LinearLayout.LayoutParams addParams = matchWidth();
+        addParams.topMargin = dp(12);
+        outer.addView(addItem, addParams);
+
+        homeEntriesHeading = UiStyle.sectionTitle(this, "Entries — All categories");
+        homeEntriesHeading.setPadding(dp(2), dp(18), 0, dp(6));
+        outer.addView(homeEntriesHeading, matchWidth());
+
+        listContainer = new LinearLayout(this);
+        listContainer.setOrientation(LinearLayout.VERTICAL);
+        outer.addView(listContainer, matchWidth());
+
+        // Secondary management actions come after the user's actual vault content.
         LinearLayout toolsCard = UiStyle.verticalCard(this, 10);
         toolsCard.addView(UiStyle.sectionTitle(this, "Vault tools"));
         toolsCard.addView(UiStyle.sectionCaption(
@@ -1346,23 +1372,8 @@ public class MainActivity extends Activity {
                         this::showSecuritySettings)), matchWidth());
 
         LinearLayout.LayoutParams toolsParams = matchWidth();
-        toolsParams.topMargin = dp(12);
+        toolsParams.topMargin = dp(16);
         outer.addView(toolsCard, toolsParams);
-
-        Button addItem = primaryButton("+  Add item");
-        addItem.setContentDescription("Add item");
-        addItem.setOnClickListener(v -> showEditDialog(null));
-        LinearLayout.LayoutParams addParams = matchWidth();
-        addParams.topMargin = dp(12);
-        outer.addView(addItem, addParams);
-
-        TextView entriesHeading = UiStyle.sectionTitle(this, "Entries");
-        entriesHeading.setPadding(dp(2), dp(18), 0, dp(6));
-        outer.addView(entriesHeading, matchWidth());
-
-        listContainer = new LinearLayout(this);
-        listContainer.setOrientation(LinearLayout.VERTICAL);
-        outer.addView(listContainer, matchWidth());
 
         // Hidden logical spinner retained only as state-holder for existing filtering
         // and export code. Users navigate through the visible tree rows above.
@@ -1374,14 +1385,20 @@ public class MainActivity extends Activity {
         categoryFilter.setVisibility(View.GONE);
         outer.addView(categoryFilter, new LinearLayout.LayoutParams(1, 1));
 
-        searchBox.addTextChangedListener(new SimpleTextWatcher(this::applyFilter));
+        searchBox.addTextChangedListener(new SimpleTextWatcher(() -> {
+            applyFilter();
+            if (!searchBox.getText().toString().trim().isEmpty()) {
+                scrollHomeToEntries();
+            }
+        }));
         categoryFilter.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             public void onItemSelected(AdapterView<?> p, View v, int pos, long id) { applyFilter(); }
             public void onNothingSelected(AdapterView<?> p) { }
         });
 
-        setContentView(wrap(outer));
-        loadItems();
+        homeScroll = wrap(outer);
+        setContentView(homeScroll);
+        applyFilter();
     }
 
     private View homeToolRow(
@@ -1537,8 +1554,17 @@ public class MainActivity extends Activity {
         row.addView(arrow, new LinearLayout.LayoutParams(dp(32), dp(40)));
 
         row.setOnClickListener(v -> {
-            selectHomeCategoryByName(allCategories ? "All" : categoryName);
+            String selected = allCategories ? "All" : categoryName;
+            selectHomeCategoryByName(selected);
+
+            if (homeEntriesHeading != null) {
+                homeEntriesHeading.setText(allCategories
+                        ? "Entries — All categories"
+                        : "Entries — " + label);
+            }
+
             applyFilter();
+            scrollHomeToEntries();
         });
 
         indent.addView(row, matchWidth());
@@ -1548,6 +1574,12 @@ public class MainActivity extends Activity {
         container.addView(indent, lp);
     }
 
+    private void scrollHomeToEntries() {
+        if (homeScroll == null || homeEntriesHeading == null) return;
+
+        homeEntriesHeading.post(() ->
+                homeScroll.smoothScrollTo(0, homeEntriesHeading.getTop()));
+    }
     private int categoryIconFor(String categoryName, boolean allCategories) {
         if (allCategories) return R.drawable.ic_keepriva_folder;
 

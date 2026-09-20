@@ -188,7 +188,7 @@ jobs:
             -no-boot-anim
             -camera-back none
           script: |
-            set -euxo pipefail
+            set -eux
 
             echo "=== Emulator / ADB diagnostics ==="
             adb version

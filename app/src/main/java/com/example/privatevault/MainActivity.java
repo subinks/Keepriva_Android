@@ -1454,8 +1454,25 @@ public class MainActivity extends Activity {
         LinearLayout editorRoot = baseVertical(8);
 
         ScrollView editorScroll = wrap(form);
+
+        // AlertDialog measures its custom content with a WRAP_CONTENT-style pass.
+        // A child using height=0 + weight=1 can therefore receive no usable space,
+        // which also prevents the action row below it from being attached/layouted
+        // consistently on some API/theme combinations.
+        //
+        // Give the editor a bounded real height instead. The fields remain scrollable,
+        // while Save/Cancel stay permanently present below the scrolling region.
+        int screenHeightPx = getResources().getDisplayMetrics().heightPixels;
+        int preferredEditorHeightPx = (int) (screenHeightPx * 0.55f);
+        int editorHeightPx = Math.max(
+                dp(280),
+                Math.min(dp(520), preferredEditorHeightPx)
+        );
+
         LinearLayout.LayoutParams scrollParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                editorHeightPx
+        );
         editorRoot.addView(editorScroll, scrollParams);
 
         LinearLayout actions = new LinearLayout(this);

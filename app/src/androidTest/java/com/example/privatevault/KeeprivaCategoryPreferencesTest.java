@@ -56,7 +56,7 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
         createFolderCategory("Folder Only");
 
         onView(withContentDescription("Manage categories")).perform(scrollTo(), click());
-        onView(withText("Folder Only  •  0 fields"))
+        onView(withText("Folder Only  â€¢  0 fields"))
                 .inRoot(isDialog())
                 .perform(scrollTo())
                 .check(matches(isDisplayed()));
@@ -68,7 +68,7 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
         createFolderCategory("Duplicate Test");
 
         onView(withContentDescription("Manage categories")).perform(scrollTo(), click());
-        onView(withText("+  New category / subcategory")).perform(scrollTo(), click());
+        onView(withContentDescription("Add category")).inRoot(isDialog()).perform(click());
 
         onView(withHint("Category name"))
                 .perform(replaceText("Duplicate Test"), closeSoftKeyboard());
@@ -82,7 +82,7 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
         createTestVault();
 
         onView(withContentDescription("Manage categories")).perform(scrollTo(), click());
-        onView(withText("+  New category / subcategory")).perform(scrollTo(), click());
+        onView(withContentDescription("Add category")).inRoot(isDialog()).perform(click());
 
         onView(withHint("Category name"))
                 .perform(replaceText("Login"), closeSoftKeyboard());
@@ -96,7 +96,7 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
         createTestVault();
 
         onView(withContentDescription("Manage categories")).perform(scrollTo(), click());
-        onView(withText("+  New category / subcategory")).perform(scrollTo(), click());
+        onView(withContentDescription("Add category")).inRoot(isDialog()).perform(click());
 
         onView(withHint("Category name"))
                 .perform(replaceText("Membership"), closeSoftKeyboard());
@@ -110,7 +110,7 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
         onView(withText("Save")).perform(click());
 
         onView(withContentDescription("Manage categories")).perform(scrollTo(), click());
-        onView(withText("Membership  •  2 fields"))
+        onView(withText("Membership  â€¢  2 fields"))
                 .inRoot(isDialog())
                 .perform(scrollTo())
                 .check(matches(isDisplayed()));
@@ -186,7 +186,7 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
                 .check(matches(isDisplayed()));
 
         onView(allOf(
-                withText("Category • 1 entry"),
+                withText("Category â€¢ 1 entry"),
                 hasSibling(withText("Login"))))
                 .perform(scrollTo())
                 .check(matches(isDisplayed()));
@@ -254,6 +254,31 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
                 .inRoot(isDialog())
                 .perform(scrollTo())
                 .check(matches(isDisplayed()));
+    }
+    @Test
+    public void categoryManager_usesCompactAccessibleControls() {
+        createTestVault();
+        createFolderCategory("Compact Row Test");
+
+        onView(withContentDescription("Manage categories")).perform(scrollTo(), click());
+        onView(withContentDescription("Add category"))
+                .inRoot(isDialog()).check(matches(isDisplayed()));
+        onView(withContentDescription("Close category manager"))
+                .inRoot(isDialog()).check(matches(isDisplayed()));
+        onView(withContentDescription("Category row Compact Row Test"))
+                .inRoot(isDialog()).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Edit category Compact Row Test"))
+                .inRoot(isDialog()).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Delete category Compact Row Test"))
+                .inRoot(isDialog()).perform(scrollTo()).check(matches(isDisplayed()));
+    }
+
+    @Test
+    public void builtInCategory_exposesDeleteAction() {
+        createTestVault();
+        onView(withContentDescription("Manage categories")).perform(scrollTo(), click());
+        onView(withContentDescription("Delete category Login"))
+                .inRoot(isDialog()).perform(scrollTo()).check(matches(isDisplayed()));
     }
     @Test
     public void quickAddMenu_showsEntryAndSubCategoryOptions() {

@@ -88,7 +88,7 @@ public class KeeprivaAuthHomeTest extends KeeprivaTestBase {
 
         onView(withText("Preferences")).perform(scrollTo()).check(matches(isDisplayed()));
         onView(withText("Security")).perform(scrollTo()).check(matches(isDisplayed()));
-        onView(withText("Lock")).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Lock vault")).check(matches(isDisplayed()));
     }
 
     @Test

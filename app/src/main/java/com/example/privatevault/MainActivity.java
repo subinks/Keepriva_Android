@@ -54,6 +54,7 @@ import javax.crypto.spec.SecretKeySpec;
 
 public class MainActivity extends Activity {
     private static final String PREFS = "vault_config";
+    private static final String PREF_HIDDEN_BUILT_IN_CATEGORIES = "hidden_built_in_categories";
     // v1.x legacy configuration keys. Kept for one-time in-place migration.
     private static final String PREF_LEGACY_SALT = "salt";
     private static final String PREF_LEGACY_VERIFIER = "verifier";
@@ -328,7 +329,7 @@ public class MainActivity extends Activity {
 
             pass.setEnabled(false);
             unlock.setEnabled(false);
-            unlock.setText("Unlocking…");
+            unlock.setText("Unlockingâ€¦");
             progress.setVisibility(View.VISIBLE);
             unlockInBackground(entered, pass, unlock, progress);
         };
@@ -346,7 +347,7 @@ public class MainActivity extends Activity {
         root.addView(authCard, matchWidth());
 
         TextView footer = new TextView(this);
-        footer.setText("Fully offline  •  Secure  •  Private");
+        footer.setText("Fully offline  â€¢  Secure  â€¢  Private");
         footer.setTextColor(Color.argb(195, 255, 255, 255));
         footer.setTextSize(12);
         footer.setGravity(Gravity.CENTER);
@@ -1169,7 +1170,7 @@ public class MainActivity extends Activity {
 
         int maxDepth = getMaxCategoryDepth();
 
-        for (String builtIn : BUILT_IN_CATEGORIES) {
+        for (String builtIn : activeBuiltInCategories()) {
             if (1 < maxDepth) {
                 options.add(new CategoryOption(builtIn, builtIn));
             }
@@ -1228,7 +1229,7 @@ public class MainActivity extends Activity {
         identity.addView(appTitle);
 
         TextView appSubtitle = new TextView(this);
-        appSubtitle.setText("Private vault • Offline by design");
+        appSubtitle.setText("Private vault â€¢ Offline by design");
         appSubtitle.setTextColor(Color.argb(205, 255, 255, 255));
         appSubtitle.setTextSize(13);
         identity.addView(appSubtitle);
@@ -1236,11 +1237,15 @@ public class MainActivity extends Activity {
         header.addView(identity, new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
 
-        Button lock = button("Lock");
+        ImageButton lock = new ImageButton(this);
+        lock.setImageResource(R.drawable.ic_keepriva_lock);
         lock.setContentDescription("Lock vault");
-        UiStyle.styleCompactButton(lock);
+        lock.setTooltipText("Lock vault");
+        lock.setPadding(dp(8), dp(8), dp(8), dp(8));
+        lock.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        lock.setBackground(UiStyle.rounded(this, R.color.keepriva_primary_dark, 18));
         lock.setOnClickListener(v -> lockVault());
-        header.addView(lock);
+        header.addView(lock, new LinearLayout.LayoutParams(dp(38), dp(38)));
 
         outer.addView(header, matchWidth());
 
@@ -1421,7 +1426,7 @@ public class MainActivity extends Activity {
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
 
         TextView arrow = new TextView(this);
-        arrow.setText("›");
+        arrow.setText("â€º");
         arrow.setTextSize(28);
         arrow.setTextColor(getColor(R.color.keepriva_text_secondary));
         arrow.setGravity(Gravity.CENTER);
@@ -1472,7 +1477,7 @@ public class MainActivity extends Activity {
                     homeCategoryTree, "All", "All categories", 0, true, query);
         }
 
-        for (String builtIn : BUILT_IN_CATEGORIES) {
+        for (String builtIn : activeBuiltInCategories()) {
             if (query.isEmpty() || categoryBranchMatches(builtIn, query)) {
                 addExpandableHomeCategory(
                         homeCategoryTree, builtIn, builtIn, 0, false, query);
@@ -1578,7 +1583,7 @@ public class MainActivity extends Activity {
         int count = allCategories ? allItems.size() : countItemsForCategory(categoryName);
         TextView countView = new TextView(this);
         countView.setText((depth == 0 ? "Category" : "Subcategory")
-                + " • " + count + (count == 1 ? " entry" : " entries"));
+                + " â€¢ " + count + (count == 1 ? " entry" : " entries"));
         countView.setTextSize(13);
         countView.setTextColor(getColor(R.color.keepriva_text_secondary));
         text.addView(countView);
@@ -1587,7 +1592,7 @@ public class MainActivity extends Activity {
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
 
         TextView arrow = new TextView(this);
-        arrow.setText(expanded ? "⌄" : "›");
+        arrow.setText(expanded ? "âŒ„" : "â€º");
         arrow.setTextSize(26);
         arrow.setTextColor(getColor(R.color.keepriva_text_secondary));
         arrow.setGravity(Gravity.CENTER);
@@ -1741,6 +1746,7 @@ public class MainActivity extends Activity {
         ImageButton b = new ImageButton(this);
         b.setImageResource(iconRes);
         b.setContentDescription(description);
+        b.setTooltipText(description);
         b.setPadding(dp(8), dp(8), dp(8), dp(8));
         b.setBackground(UiStyle.rounded(this, R.color.keepriva_surface_soft, 18));
         b.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
@@ -1810,7 +1816,7 @@ public class MainActivity extends Activity {
         title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         title.setTextColor(getColor(R.color.keepriva_text_primary));
         card.addView(title);
-        TextView cat = subtitle(categoryPath(item.category) + (item.username.isEmpty() ? "" : "  •  " + item.username));
+        TextView cat = subtitle(categoryPath(item.category) + (item.username.isEmpty() ? "" : "  â€¢  " + item.username));
         card.addView(cat);
         UiStyle.styleCard(card);
         card.setOnClickListener(v -> showDetails(item));
@@ -1876,7 +1882,7 @@ public class MainActivity extends Activity {
             LinearLayout pwRow = new LinearLayout(this);
             pwRow.setOrientation(LinearLayout.HORIZONTAL);
             TextView pw = new TextView(this);
-            pw.setText("••••••••••••");
+            pw.setText("â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢");
             pw.setTextSize(17);
             pw.setPadding(0, dp(4), dp(8), dp(8));
             pwRow.addView(pw, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
@@ -1885,7 +1891,7 @@ public class MainActivity extends Activity {
             final boolean[] visible = {false};
             show.setOnClickListener(v -> {
                 visible[0] = !visible[0];
-                pw.setText(visible[0] ? item.password : "••••••••••••");
+                pw.setText(visible[0] ? item.password : "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢");
                 show.setImageResource(visible[0] ? R.drawable.ic_keepriva_visibility_off : R.drawable.ic_keepriva_visibility);
                 show.setContentDescription(visible[0] ? "Hide password" : "Show password");
             });
@@ -2262,7 +2268,7 @@ public class MainActivity extends Activity {
 
     private CategoryOption[] getEditableCategories() {
         List<CategoryOption> options = new ArrayList<>();
-        for (String builtIn : BUILT_IN_CATEGORIES) options.add(new CategoryOption(builtIn, builtIn));
+        for (String builtIn : activeBuiltInCategories()) options.add(new CategoryOption(builtIn, builtIn));
         List<CustomCategory> sorted = new ArrayList<>(customCategories);
         sorted.sort((a,b) -> categoryPath(a.name).compareToIgnoreCase(categoryPath(b.name)));
         for (CustomCategory c : sorted) {
@@ -2274,7 +2280,7 @@ public class MainActivity extends Activity {
     private CategoryOption[] getFilterCategories() {
         List<CategoryOption> options = new ArrayList<>();
         options.add(new CategoryOption("All", "All categories"));
-        for (String builtIn : BUILT_IN_CATEGORIES) options.add(new CategoryOption(builtIn, builtIn));
+        for (String builtIn : activeBuiltInCategories()) options.add(new CategoryOption(builtIn, builtIn));
         List<CustomCategory> sorted = new ArrayList<>(customCategories);
         sorted.sort((a,b) -> categoryPath(a.name).compareToIgnoreCase(categoryPath(b.name)));
         for (CustomCategory c : sorted) {
@@ -2320,192 +2326,176 @@ public class MainActivity extends Activity {
     }
 
     private void showCustomCategoriesDialog() {
-        LinearLayout body = baseVertical(10);
-        body.setPadding(dp(12), dp(12), dp(12), dp(18));
+        LinearLayout root = baseVertical(4);
+        root.setPadding(dp(10), dp(8), dp(10), dp(8));
 
-        body.addView(UiStyle.sectionCaption(
-                this,
-                "Categories are shown as a hierarchy. Subcategories appear directly below their parent. "
-                        + "Maximum depth: " + getMaxCategoryDepth()
-                        + " of " + HARD_MAX_CATEGORY_DEPTH + "."
-        ));
+        final AlertDialog[] holder = new AlertDialog[1];
 
-        body.addView(UiStyle.sectionTitle(this, "Category hierarchy"));
+        LinearLayout top = new LinearLayout(this);
+        top.setOrientation(LinearLayout.HORIZONTAL);
+        top.setGravity(Gravity.CENTER_VERTICAL);
 
-        Set<String> rendered = new HashSet<>();
+        TextView title = UiStyle.sectionTitle(this, "Manage Categories");
+        top.addView(title, new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
 
-        for (String builtIn : BUILT_IN_CATEGORIES) {
-            addBuiltInCategoryTreeRow(body, builtIn);
-            addCustomCategoryChildren(body, builtIn, 1, rendered);
+        ImageButton close = smallIconButton(
+                R.drawable.ic_keepriva_close, "Close category manager", false);
+        close.setTooltipText("Close category manager");
+        top.addView(close, new LinearLayout.LayoutParams(dp(36), dp(36)));
+        root.addView(top, matchWidth());
+
+        LinearLayout hierarchyHeader = new LinearLayout(this);
+        hierarchyHeader.setOrientation(LinearLayout.HORIZONTAL);
+        hierarchyHeader.setGravity(Gravity.CENTER_VERTICAL);
+        hierarchyHeader.setPadding(0, dp(4), 0, dp(4));
+
+        ImageButton add = smallIconButton(
+                R.drawable.ic_keepriva_add, "Add category", false);
+        add.setTooltipText("Add category or subcategory");
+        hierarchyHeader.addView(add, new LinearLayout.LayoutParams(dp(36), dp(36)));
+
+        TextView heading = boldLabel("Category Hierarchy");
+        LinearLayout.LayoutParams headingParams = new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1);
+        headingParams.leftMargin = dp(8);
+        hierarchyHeader.addView(heading, headingParams);
+        root.addView(hierarchyHeader, matchWidth());
+
+        LinearLayout rows = new LinearLayout(this);
+        rows.setOrientation(LinearLayout.VERTICAL);
+        for (String builtIn : activeBuiltInCategories()) {
+            addBuiltInCategoryTreeRow(rows, builtIn);
         }
 
-        List<CustomCategory> topLevel = new ArrayList<>();
-        for (CustomCategory category : customCategories) {
-            if (safe(category.parentName).trim().isEmpty()) topLevel.add(category);
+        List<CustomCategory> sorted = new ArrayList<>(customCategories);
+        sorted.sort((a, b) -> categoryPath(a.name).compareToIgnoreCase(categoryPath(b.name)));
+        for (CustomCategory category : sorted) {
+            addCustomCategoryTreeRow(rows, category);
         }
-        topLevel.sort((a,b) -> safe(a.name).compareToIgnoreCase(safe(b.name)));
-
-        for (CustomCategory category : topLevel) {
-            String key = safe(category.name).toLowerCase(Locale.ROOT);
-            if (!rendered.add(key)) continue;
-            addCustomCategoryTreeRow(body, category, 0);
-            addCustomCategoryChildren(body, category.name, 1, rendered);
+        if (rows.getChildCount() == 0) {
+            TextView empty = subtitle("No categories available. Use + to create one.");
+            empty.setContentDescription("Empty category hierarchy");
+            rows.addView(empty);
         }
 
-        List<CustomCategory> leftovers = new ArrayList<>();
-        for (CustomCategory category : customCategories) {
-            if (!rendered.contains(safe(category.name).toLowerCase(Locale.ROOT))) {
-                leftovers.add(category);
-            }
-        }
-        leftovers.sort((a,b) -> categoryPath(a.name).compareToIgnoreCase(categoryPath(b.name)));
-        for (CustomCategory category : leftovers) {
-            rendered.add(safe(category.name).toLowerCase(Locale.ROOT));
-            addCustomCategoryTreeRow(
-                    body, category, Math.max(0, categoryDepth(category.name) - 1));
-        }
-
-        if (customCategories.isEmpty()) {
-            TextView empty = subtitle("No custom categories yet. Create a category or subcategory below.");
-            empty.setPadding(dp(4), dp(12), dp(4), dp(12));
-            body.addView(empty);
-        }
-
-        Button add = primaryButton("+  New category / subcategory");
-        add.setContentDescription("Add category or subcategory");
-        add.setOnClickListener(v -> {
-            AlertDialog parentDialog = findShowingDialogForView(v);
-            if (parentDialog != null) parentDialog.dismiss();
-            showCustomCategoryEditor(null);
-        });
-
-        LinearLayout.LayoutParams addParams = matchWidth();
-        addParams.topMargin = dp(14);
-        body.addView(add, addParams);
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.addView(rows);
+        root.addView(scroll, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
 
         AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("Categories")
-                .setView(wrap(body))
-                .setNegativeButton("Close", null)
+                .setView(root)
                 .create();
-
-        body.setTag(dialog);
+        holder[0] = dialog;
+        close.setOnClickListener(v -> dialog.dismiss());
+        add.setOnClickListener(v -> {
+            dialog.dismiss();
+            showCustomCategoryEditor(null);
+        });
         ScreenSecurityManager.protect(dialog);
+        dialog.setOnShowListener(ignored -> {
+            android.view.Window window = dialog.getWindow();
+            if (window != null) {
+                window.setLayout(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        (int) (getResources().getDisplayMetrics().heightPixels * 0.88f));
+            }
+        });
         dialog.show();
     }
 
-    private void addBuiltInCategoryTreeRow(LinearLayout body, String name) {
-        LinearLayout card = UiStyle.verticalCard(this, 12);
+    private LinearLayout compactCategoryRow(String name, int depth) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(6 + Math.max(0, depth - 1) * 14), dp(3), dp(4), dp(3));
+        row.setMinimumHeight(dp(46));
+        row.setBackground(UiStyle.outlined(
+                this, R.color.keepriva_surface, R.color.keepriva_outline, 10));
+        row.setContentDescription("Category row " + name);
+        return row;
+    }
 
+    private void addCategoryRowIcon(LinearLayout row, String name) {
         ImageView icon = new ImageView(this);
         icon.setImageResource(categoryIconFor(name, false));
         icon.setContentDescription("Category icon " + categoryIconFamily(name, false));
-        icon.setPadding(dp(7), dp(7), dp(7), dp(7));
-        icon.setBackground(UiStyle.rounded(this, R.color.keepriva_surface_soft, 20));
-        card.addView(icon, new LinearLayout.LayoutParams(dp(40), dp(40)));
-
-        TextView title = new TextView(this);
-        title.setText(name);
-        title.setTextSize(16);
-        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        title.setTextColor(getColor(R.color.keepriva_text_primary));
-        card.addView(title);
-
-        int count = directChildCount(name);
-        card.addView(UiStyle.sectionCaption(
-                this,
-                count == 0
-                        ? "Built-in category"
-                        : "Built-in category • " + count
-                                + (count == 1 ? " subcategory" : " subcategories")
-        ));
-
-        LinearLayout.LayoutParams lp = matchWidth();
-        lp.setMargins(0, dp(8), 0, 0);
-        body.addView(card, lp);
+        icon.setPadding(dp(5), dp(5), dp(5), dp(5));
+        icon.setBackground(UiStyle.rounded(this, R.color.keepriva_surface_soft, 16));
+        LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(32), dp(32));
+        iconParams.rightMargin = dp(8);
+        row.addView(icon, iconParams);
     }
 
-    private void addCustomCategoryChildren(
-            LinearLayout body, String parentName, int depth, Set<String> rendered) {
+    private void addBuiltInCategoryTreeRow(LinearLayout body, String name) {
+        LinearLayout row = compactCategoryRow(name, 1);
+        addCategoryRowIcon(row, name);
 
-        List<CustomCategory> children = new ArrayList<>();
-        for (CustomCategory category : customCategories) {
-            if (safe(category.parentName).equalsIgnoreCase(safe(parentName))) {
-                children.add(category);
-            }
-        }
-        children.sort((a,b) -> safe(a.name).compareToIgnoreCase(safe(b.name)));
+        TextView label = new TextView(this);
+        label.setText(name);
+        label.setTextSize(14);
+        label.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        label.setSingleLine(true);
+        label.setTextColor(getColor(R.color.keepriva_text_primary));
+        row.addView(label, new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
 
-        for (CustomCategory child : children) {
-            String key = safe(child.name).toLowerCase(Locale.ROOT);
-            if (!rendered.add(key)) continue;
-            addCustomCategoryTreeRow(body, child, depth);
-            addCustomCategoryChildren(body, child.name, depth + 1, rendered);
-        }
+        ImageButton delete = smallIconButton(
+                R.drawable.ic_keepriva_delete, "Delete category " + name, true);
+        delete.setTooltipText("Delete " + name);
+        delete.setOnClickListener(v -> {
+            AlertDialog parent = findShowingDialogForView(v);
+            if (parent != null) parent.dismiss();
+            deleteCategory(name, null);
+        });
+        row.addView(delete, new LinearLayout.LayoutParams(dp(36), dp(36)));
+
+        LinearLayout.LayoutParams rowParams = matchWidth();
+        rowParams.bottomMargin = dp(3);
+        body.addView(row, rowParams);
     }
 
-    private void addCustomCategoryTreeRow(
-            LinearLayout body, CustomCategory category, int depth) {
+    private void addCustomCategoryTreeRow(LinearLayout body, CustomCategory category) {
+        LinearLayout row = compactCategoryRow(category.name, categoryDepth(category.name));
+        addCategoryRowIcon(row, category.name);
 
-        LinearLayout indent = new LinearLayout(this);
-        indent.setOrientation(LinearLayout.VERTICAL);
-        indent.setPadding(dp(Math.min(depth, HARD_MAX_CATEGORY_DEPTH) * 18), 0, 0, 0);
+        TextView label = new TextView(this);
+        label.setText(category.name);
+        label.setTextSize(14);
+        label.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        label.setSingleLine(true);
+        label.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        label.setTextColor(getColor(R.color.keepriva_text_primary));
+        row.addView(label, new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
 
-        LinearLayout card = UiStyle.verticalCard(this, 12);
-
-        ImageView categoryIcon = new ImageView(this);
-        categoryIcon.setImageResource(categoryIconFor(category.name, false));
-        categoryIcon.setContentDescription("Category icon " + categoryIconFamily(category.name, false));
-        categoryIcon.setPadding(dp(7), dp(7), dp(7), dp(7));
-        categoryIcon.setBackground(UiStyle.rounded(this, R.color.keepriva_surface_soft, 20));
-        card.addView(categoryIcon, new LinearLayout.LayoutParams(dp(40), dp(40)));
-
-        TextView title = new TextView(this);
-        title.setText(category.name + "  •  " + category.fields.size() + " fields");
-        title.setTextSize(15);
-        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        title.setTextColor(getColor(R.color.keepriva_text_primary));
-        card.addView(title);
-
-        String parentName = safe(category.parentName).trim();
-        card.addView(UiStyle.sectionCaption(
-                this,
-                parentName.isEmpty()
-                        ? "Top-level custom category"
-                        : "Subcategory of " + parentName
-        ));
-
-        LinearLayout actions = new LinearLayout(this);
-        actions.setOrientation(LinearLayout.HORIZONTAL);
-        actions.setGravity(Gravity.END);
-
-        ImageButton edit = smallIconButton(R.drawable.ic_keepriva_edit,
-                "Edit category " + category.name, false);
+        ImageButton edit = smallIconButton(
+                R.drawable.ic_keepriva_edit, "Edit category " + category.name, false);
+        edit.setTooltipText("Edit " + category.name);
         edit.setOnClickListener(v -> {
-            AlertDialog parentDialog = findShowingDialogForView(v);
-            if (parentDialog != null) parentDialog.dismiss();
+            AlertDialog parent = findShowingDialogForView(v);
+            if (parent != null) parent.dismiss();
             showCustomCategoryEditor(category);
         });
+        row.addView(edit, new LinearLayout.LayoutParams(dp(36), dp(36)));
 
-        ImageButton del = smallIconButton(R.drawable.ic_keepriva_delete,
-                "Delete category " + category.name, true);
-        del.setOnClickListener(v -> {
-            AlertDialog parentDialog = findShowingDialogForView(v);
-            if (parentDialog != null) parentDialog.dismiss();
-            deleteCustomCategory(category);
+        ImageButton delete = smallIconButton(
+                R.drawable.ic_keepriva_delete, "Delete category " + category.name, true);
+        delete.setTooltipText("Delete " + category.name);
+        delete.setOnClickListener(v -> {
+            AlertDialog parent = findShowingDialogForView(v);
+            if (parent != null) parent.dismiss();
+            deleteCategory(category.name, category);
         });
+        LinearLayout.LayoutParams deleteParams = new LinearLayout.LayoutParams(dp(36), dp(36));
+        deleteParams.leftMargin = dp(3);
+        row.addView(delete, deleteParams);
 
-        actions.addView(edit);
-        LinearLayout.LayoutParams delParams = new LinearLayout.LayoutParams(dp(40), dp(40));
-        delParams.leftMargin = dp(8);
-        actions.addView(del, delParams);
-
-        card.addView(actions, matchWidth());
-        indent.addView(card, matchWidth());
-
-        LinearLayout.LayoutParams lp = matchWidth();
-        lp.setMargins(0, dp(8), 0, 0);
-        body.addView(indent, lp);
+        LinearLayout.LayoutParams rowParams = matchWidth();
+        rowParams.bottomMargin = dp(3);
+        body.addView(row, rowParams);
     }
     private void showCustomCategoryEditor(CustomCategory existing) {
         showCustomCategoryEditor(existing, null);
@@ -2587,48 +2577,192 @@ public class MainActivity extends Activity {
         d.show();
     }
 
+    private Set<String> hiddenBuiltInCategories() {
+        Set<String> result = new HashSet<>();
+        String stored = getSharedPreferences(PREFS, MODE_PRIVATE)
+                .getString(PREF_HIDDEN_BUILT_IN_CATEGORIES, "");
+        for (String name : stored.split("\\n")) {
+            String normalized = safe(name).trim().toLowerCase(Locale.ROOT);
+            if (!normalized.isEmpty()) result.add(normalized);
+        }
+        return result;
+    }
+
+    private List<String> activeBuiltInCategories() {
+        Set<String> hidden = hiddenBuiltInCategories();
+        List<String> active = new ArrayList<>();
+        for (String name : BUILT_IN_CATEGORIES) {
+            if (!hidden.contains(name.toLowerCase(Locale.ROOT))) active.add(name);
+        }
+        return active;
+    }
+
+    private void hideBuiltInCategory(String categoryName) {
+        Set<String> hidden = hiddenBuiltInCategories();
+        hidden.add(safe(categoryName).trim().toLowerCase(Locale.ROOT));
+        List<String> sorted = new ArrayList<>(hidden);
+        Collections.sort(sorted);
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putString(PREF_HIDDEN_BUILT_IN_CATEGORIES, String.join("\n", sorted))
+                .apply();
+    }
+
+    private boolean isHiddenBuiltInCategory(String categoryName) {
+        return hiddenBuiltInCategories().contains(
+                safe(categoryName).trim().toLowerCase(Locale.ROOT));
+    }
     private boolean isBuiltInCategory(String name) {
         for (String c : BUILT_IN_CATEGORIES) if (c.equalsIgnoreCase(name)) return true;
         return "All".equalsIgnoreCase(name);
     }
 
     private void deleteCustomCategory(CustomCategory category) {
-        int usedCount = 0;
-        for (VaultItem item : allItems) if (safe(item.category).equals(category.name)) usedCount++;
-        int childCount = directChildCount(category.name);
-        final int finalUsedCount = usedCount;
-        final int finalChildCount = childCount;
+        deleteCategory(category.name, category);
+    }
 
-        if (usedCount == 0 && childCount == 0) {
-            AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Delete category?")
-                    .setMessage("Delete \"" + categoryPath(category.name) + "\"? It contains no direct items or sub-categories.")
-                    .setPositiveButton("Delete", (d, w) -> {
-                        database.deleteCustomCategory(category.id);
-                        showVaultScreen();
-                        toast("Category deleted.");
-                    })
-                    .setNegativeButton("Cancel", null).create();
+    private void deleteCategory(String categoryName, CustomCategory customCategory) {
+        if (customCategory == null
+                && isBuiltInCategory(categoryName)
+                && activeBuiltInCategories().size() == 1
+                && customCategories.isEmpty()) {
+            toast("Create another category before deleting the final available category.");
+            return;
+        }
+
+        Set<String> subtreeNames = categorySubtreeNames(categoryName);
+        int itemCount = 0;
+        for (VaultItem item : allItems) {
+            if (subtreeNames.contains(safe(item.category).toLowerCase(Locale.ROOT))) itemCount++;
+        }
+        int descendantCount = Math.max(0, subtreeNames.size() - 1);
+        final int totalItemCount = itemCount;
+
+        if (itemCount == 0 && descendantCount == 0) {
+            AlertDialog dialog = new AlertDialog.Builder(this)
+                    .setTitle("Delete category?")
+                    .setMessage("Delete \"" + categoryPath(categoryName) + "\"?")
+                    .setPositiveButton("Delete category", (d, w) ->
+                            performCategorySubtreeDelete(categoryName, customCategory, subtreeNames))
+                    .setNegativeButton("Cancel", null)
+                    .create();
+            dialog.setOnShowListener(ignored -> {
+                Button confirm = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+                confirm.setContentDescription("Confirm delete category " + categoryName);
+                confirm.setTextColor(getColor(R.color.keepriva_danger));
+            });
             ScreenSecurityManager.protect(dialog);
             dialog.show();
             return;
         }
 
-        String message = "\"" + categoryPath(category.name) + "\" contains "
-                + usedCount + (usedCount == 1 ? " direct item" : " direct items") + " and "
-                + childCount + (childCount == 1 ? " direct sub-category." : " direct sub-categories.")
-                + "\n\nChoose another category. Direct items will move there and direct sub-categories will be re-parented there. Descendant trees and item contents are preserved.";
+        String summary = "\"" + categoryPath(categoryName) + "\" contains "
+                + itemCount + (itemCount == 1 ? " item" : " items") + " and "
+                + descendantCount + (descendantCount == 1 ? " subcategory" : " subcategories")
+                + " in its complete subtree.";
+
         AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("Move contents before deleting")
-                .setMessage(message)
-                .setPositiveButton("Choose destination", (d, w) -> showMoveCategoryContentsDialog(category, finalUsedCount, finalChildCount))
-                .setNegativeButton("Cancel", null).create();
+                .setTitle("Delete category")
+                .setMessage(summary + "\n\nChoose the safe move flow, or explicitly delete the entire subtree.")
+                .setPositiveButton("Move contents", null)
+                .setNeutralButton("Delete all contents", null)
+                .setNegativeButton("Cancel", null)
+                .create();
+        dialog.setOnShowListener(ignored -> {
+            Button move = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            move.setEnabled(customCategory != null);
+            move.setOnClickListener(v -> {
+                if (customCategory == null) {
+                    toast("Built-in category contents must be deleted together or moved manually first.");
+                    return;
+                }
+                dialog.dismiss();
+                showMoveCategoryContentsDialog(customCategory,
+                        directItemCount(categoryName), directChildCount(categoryName));
+            });
+
+            Button destructive = dialog.getButton(AlertDialog.BUTTON_NEUTRAL);
+            destructive.setTextColor(getColor(R.color.keepriva_danger));
+            destructive.setContentDescription("Delete category and all contents");
+            destructive.setOnClickListener(v -> {
+                dialog.dismiss();
+                confirmForceDeleteCategory(categoryName, customCategory, subtreeNames,
+                        totalItemCount, descendantCount);
+            });
+        });
         ScreenSecurityManager.protect(dialog);
         dialog.show();
     }
 
+    private int directItemCount(String categoryName) {
+        int count = 0;
+        for (VaultItem item : allItems) {
+            if (safe(item.category).equalsIgnoreCase(categoryName)) count++;
+        }
+        return count;
+    }
+
+    private Set<String> categorySubtreeNames(String rootName) {
+        Set<String> names = new HashSet<>();
+        names.add(safe(rootName).toLowerCase(Locale.ROOT));
+        boolean changed;
+        do {
+            changed = false;
+            for (CustomCategory category : customCategories) {
+                String parent = safe(category.parentName).toLowerCase(Locale.ROOT);
+                String child = safe(category.name).toLowerCase(Locale.ROOT);
+                if (names.contains(parent) && names.add(child)) changed = true;
+            }
+        } while (changed);
+        return names;
+    }
+
+    private void confirmForceDeleteCategory(String categoryName,
+                                            CustomCategory customCategory,
+                                            Set<String> subtreeNames,
+                                            int itemCount,
+                                            int descendantCount) {
+        AlertDialog confirm = new AlertDialog.Builder(this)
+                .setTitle("Permanently delete subtree?")
+                .setMessage("This permanently deletes " + itemCount
+                        + (itemCount == 1 ? " item and " : " items and ")
+                        + descendantCount
+                        + (descendantCount == 1 ? " subcategory." : " subcategories.")
+                        + " This action cannot be undone.")
+                .setPositiveButton("Delete permanently", (d, w) ->
+                        performCategorySubtreeDelete(categoryName, customCategory, subtreeNames))
+                .setNegativeButton("Cancel", null)
+                .create();
+        confirm.setOnShowListener(ignored ->
+                confirm.getButton(AlertDialog.BUTTON_POSITIVE)
+                        .setTextColor(getColor(R.color.keepriva_danger)));
+        ScreenSecurityManager.protect(confirm);
+        confirm.show();
+    }
+
+    private void performCategorySubtreeDelete(String categoryName,
+                                              CustomCategory customCategory,
+                                              Set<String> subtreeNames) {
+        Set<Long> categoryIds = new HashSet<>();
+        for (CustomCategory category : customCategories) {
+            if (subtreeNames.contains(safe(category.name).toLowerCase(Locale.ROOT))) {
+                categoryIds.add(category.id);
+            }
+        }
+        try {
+            database.deleteCategorySubtree(allItems, subtreeNames, categoryIds);
+            if (customCategory == null && isBuiltInCategory(categoryName)) {
+                hideBuiltInCategory(categoryName);
+            }
+            showVaultScreen();
+            toast("Category subtree deleted.");
+        } catch (Exception e) {
+            showVaultScreen();
+            toast("Could not delete category. No partial deletion was committed.");
+        }
+    }
     private void showMoveCategoryContentsDialog(CustomCategory sourceCategory, int entryCount, int childCount) {
         List<CategoryOption> destinations = new ArrayList<>();
-        for (String builtIn : BUILT_IN_CATEGORIES) {
+        for (String builtIn : activeBuiltInCategories()) {
             if (!isDescendantOf(builtIn, sourceCategory.name)) destinations.add(new CategoryOption(builtIn, builtIn));
         }
         for (CustomCategory custom : customCategories) {
@@ -2783,7 +2917,7 @@ public class MainActivity extends Activity {
                         : "Safe export: passwords and sensitive custom fields will be omitted.");
         box.addView(warning);
 
-        Button json = primaryButton("Keepriva JSON (.json) — re-importable");
+        Button json = primaryButton("Keepriva JSON (.json) â€” re-importable");
         Button txt = button("Formatted text (.txt)");
         Button html = button("HTML page (.html)");
         Button pdf = button("PDF document (.pdf)");
@@ -3087,8 +3221,8 @@ public class MainActivity extends Activity {
                 this, R.color.keepriva_surface_soft, R.color.keepriva_outline, 12));
         box.addView(steps, matchWidth());
 
-        Button download = button("Step 1 — Save JSON import template");
-        Button importFile = primaryButton("Step 2 — Import completed JSON template");
+        Button download = button("Step 1 â€” Save JSON import template");
+        Button importFile = primaryButton("Step 2 â€” Import completed JSON template");
 
         LinearLayout.LayoutParams first = matchWidth();
         first.topMargin = dp(10);
@@ -3164,8 +3298,8 @@ public class MainActivity extends Activity {
         if (!parsed.warnings.isEmpty()) {
             message.append("\n\nWarnings:");
             int limit = Math.min(parsed.warnings.size(), 8);
-            for (int i = 0; i < limit; i++) message.append("\n• ").append(parsed.warnings.get(i));
-            if (parsed.warnings.size() > limit) message.append("\n• … and ").append(parsed.warnings.size() - limit).append(" more");
+            for (int i = 0; i < limit; i++) message.append("\nâ€¢ ").append(parsed.warnings.get(i));
+            if (parsed.warnings.size() > limit) message.append("\nâ€¢ â€¦ and ").append(parsed.warnings.size() - limit).append(" more");
         }
         List<CustomCategory> hierarchyPreview = new ArrayList<>(customCategories);
         hierarchyPreview.addAll(parsed.categoriesToCreate);
@@ -3175,8 +3309,8 @@ public class MainActivity extends Activity {
         if (!parsed.errors.isEmpty()) {
             message.append("\n\nErrors:");
             int limit = Math.min(parsed.errors.size(), 8);
-            for (int i = 0; i < limit; i++) message.append("\n• ").append(parsed.errors.get(i));
-            if (parsed.errors.size() > limit) message.append("\n• … and ").append(parsed.errors.size() - limit).append(" more");
+            for (int i = 0; i < limit; i++) message.append("\nâ€¢ ").append(parsed.errors.get(i));
+            if (parsed.errors.size() > limit) message.append("\nâ€¢ â€¦ and ").append(parsed.errors.size() - limit).append(" more");
             new AlertDialog.Builder(this).setTitle("Import validation failed")
                     .setMessage(message.toString()).setPositiveButton("Close", null).show();
             return;
@@ -3186,7 +3320,7 @@ public class MainActivity extends Activity {
                     .setMessage(message.toString()).setPositiveButton("Close", null).show();
             return;
         }
-        message.append("\n\nOn import, all entry fields—including fields marked sensitive—are encrypted before being written to the local vault database.");
+        message.append("\n\nOn import, all entry fieldsâ€”including fields marked sensitiveâ€”are encrypted before being written to the local vault database.");
         new AlertDialog.Builder(this).setTitle("Import preview")
                 .setMessage(message.toString())
                 .setPositiveButton("Import", (d, w) -> commitImport(parsed))
@@ -3316,7 +3450,7 @@ public class MainActivity extends Activity {
 
     private TextView subtitle(String text) {
         TextView v = new TextView(this);
-        v.setText(text == null || text.isEmpty() ? "—" : text);
+        v.setText(text == null || text.isEmpty() ? "â€”" : text);
         v.setTextSize(15);
         v.setPadding(0, dp(2), 0, dp(10));
         UiStyle.styleBodyText(v);
@@ -3349,7 +3483,7 @@ public class MainActivity extends Activity {
         row.setGravity(Gravity.CENTER_VERTICAL);
 
         TextView display = new TextView(this);
-        display.setText("••••••••••••");
+        display.setText("â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢");
         display.setTextSize(17);
         display.setPadding(0, dp(4), dp(8), dp(8));
         UiStyle.styleBodyText(display);
@@ -3359,7 +3493,7 @@ public class MainActivity extends Activity {
         Button show = button("Show");
         show.setOnClickListener(v -> {
             visible[0] = !visible[0];
-            display.setText(visible[0] ? value : "••••••••••••");
+            display.setText(visible[0] ? value : "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢");
             show.setText(visible[0] ? "Hide" : "Show");
         });
         row.addView(show);

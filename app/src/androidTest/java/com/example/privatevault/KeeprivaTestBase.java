@@ -302,8 +302,9 @@ public abstract class KeeprivaTestBase {
 
     protected void createFolderCategory(String name) {
         onView(withContentDescription("Manage categories")).perform(scrollTo(), click());
-        onView(withText("+  New category / subcategory"))
-                .perform(scrollTo(), click());
+        onView(withContentDescription("Add category"))
+                .inRoot(isDialog())
+                .perform(click());
 
         onView(withHint("Category name"))
                 .perform(replaceText(name), closeSoftKeyboard());

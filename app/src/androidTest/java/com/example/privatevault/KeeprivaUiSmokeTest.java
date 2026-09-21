@@ -144,7 +144,7 @@ public class KeeprivaUiSmokeTest {
     public void lock_returnsToUnlockScreen() {
         createTestVault();
 
-        onView(withText("Lock")).perform(scrollTo(), click());
+        onView(withContentDescription("Lock vault")).perform(scrollTo(), click());
 
         onView(withHint("Master password")).check(matches(isDisplayed()));
         onView(withText("Unlock")).check(matches(isDisplayed()));
@@ -154,7 +154,7 @@ public class KeeprivaUiSmokeTest {
     public void wrongMasterPassword_doesNotUnlock() {
         createTestVault();
 
-        onView(withText("Lock")).perform(scrollTo(), click());
+        onView(withContentDescription("Lock vault")).perform(scrollTo(), click());
 
         onView(withHint("Master password"))
                 .perform(replaceText("WrongPassword123!"), closeSoftKeyboard());
@@ -189,9 +189,9 @@ public class KeeprivaUiSmokeTest {
 
         onView(withContentDescription("Import")).perform(scrollTo(), click());
 
-        onView(withText("Step 1 — Save JSON import template"))
+        onView(withText("Step 1 â€” Save JSON import template"))
                 .check(matches(isDisplayed()));
-        onView(withText("Step 2 — Import completed JSON template"))
+        onView(withText("Step 2 â€” Import completed JSON template"))
                 .check(matches(isDisplayed()));
     }
 
@@ -235,10 +235,9 @@ public class KeeprivaUiSmokeTest {
 
         onView(withContentDescription("Manage categories")).perform(scrollTo(), click());
 
-        onView(withText("Categories")).check(matches(isDisplayed()));
-        onView(withText("+  New category / subcategory"))
+        onView(withText("Manage Categories")).check(matches(isDisplayed()));
+        onView(withContentDescription("Add category"))
                 .inRoot(isDialog())
-                .perform(scrollTo())
                 .check(matches(isDisplayed()));
     }
 }

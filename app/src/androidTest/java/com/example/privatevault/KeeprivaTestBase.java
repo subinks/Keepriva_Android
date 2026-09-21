@@ -217,7 +217,9 @@ public abstract class KeeprivaTestBase {
         openAddItem();
         typeItemTitle(titleText);
         saveItemEditor();
-        onView(withText(titleText)).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Open entry " + titleText))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
     }
 
     protected void createLoginItem(String titleText, String username, String password) {
@@ -233,7 +235,9 @@ public abstract class KeeprivaTestBase {
                 .perform(scrollTo(), replaceText(password), closeSoftKeyboard());
 
         saveItemEditor();
-        onView(withText(titleText)).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Open entry " + titleText))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
     }
 
     protected void saveItemEditor() {

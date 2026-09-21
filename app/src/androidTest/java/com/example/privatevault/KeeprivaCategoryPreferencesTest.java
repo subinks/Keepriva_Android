@@ -191,6 +191,62 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
                 .check(matches(isDisplayed()));
     }
     @Test
+    public void builtInCategories_haveDistinctSemanticIcons() {
+        createTestVault();
+        onView(withContentDescription("Category icon Login")).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Category icon Website")).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Category icon App")).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Category icon Contact")).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Category icon Banking")).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Category icon Work")).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Category icon Personal")).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Category icon Secure Note")).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Category icon Other")).perform(scrollTo()).check(matches(isDisplayed()));
+    }
+
+    @Test
+    public void customCategory_usesCommonCustomIcon() {
+        createTestVault();
+        createFolderCategory("Custom Icon Test");
+        onView(withContentDescription("Category icon Custom")).perform(scrollTo()).check(matches(isDisplayed()));
+    }
+
+    @Test
+    public void subCategory_inheritsBuiltInParentIcon() {
+        createTestVault();
+        selectHomeCategory("Login");
+
+        onView(withContentDescription("Add entry or subcategory"))
+                .perform(scrollTo(), click());
+        onView(withText("Sub Category")).perform(click());
+
+        onView(withHint("Category name"))
+                .perform(replaceText("Login Child"), closeSoftKeyboard());
+        onView(withText("Save")).perform(click());
+
+        // Login itself is index 0; the child should reuse the same semantic icon family.
+        onView(withIndex(withContentDescription("Category icon Login"), 1))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
+    }
+
+    @Test
+    public void customCategoryActions_areCompactIconButtons() {
+        createTestVault();
+        createFolderCategory("Action Icon Test");
+
+        onView(withContentDescription("Manage categories"))
+                .perform(scrollTo(), click());
+        onView(withContentDescription("Edit category Action Icon Test"))
+                .inRoot(isDialog())
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
+        onView(withContentDescription("Delete category Action Icon Test"))
+                .inRoot(isDialog())
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
+    }
+    @Test
     public void quickAddMenu_showsEntryAndSubCategoryOptions() {
         createTestVault();
 
@@ -208,10 +264,6 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
 
         onView(withHint("Search title, username, phone, website or notes"))
                 .perform(scrollTo(), replaceText("Search Child"), closeSoftKeyboard());
-
-        onView(withText("Search Child"))
-                .perform(scrollTo())
-                .check(matches(isDisplayed()));
 
         onView(withContentDescription("Close category Search Child"))
                 .perform(scrollTo())

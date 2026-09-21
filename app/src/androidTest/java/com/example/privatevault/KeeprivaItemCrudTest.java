@@ -49,7 +49,7 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
 
         cancelItemEditor();
 
-        onView(withText("No items yet. Tap Add item to create your first credential or note."))
+        onView(withContentDescription("Empty vault"))
                 .perform(scrollTo())
                 .check(matches(isDisplayed()));
     }
@@ -59,7 +59,7 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
         createTestVault();
         createBasicItem("Alpha Item");
 
-        onView(withText("Alpha Item")).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Open entry Alpha Item")).perform(scrollTo()).check(matches(isDisplayed()));
     }
 
     @Test
@@ -67,7 +67,7 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
         createTestVault();
         createLoginItem("Git Login", "user@example.com", "Secret123!");
 
-        onView(withText("Git Login")).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Open entry Git Login")).perform(scrollTo()).check(matches(isDisplayed()));
     }
 
     @Test
@@ -75,25 +75,26 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
         createTestVault();
         createBasicItem("Details Item");
 
-        onView(withText("Details Item")).perform(click());
+        onView(withContentDescription("Open entry Details Item")).perform(scrollTo(), click());
 
         onView(withText("Details Item"))
                 .inRoot(isDialog())
                 .check(matches(isDisplayed()));
 
-        onView(withText("Edit"))
+        onView(withContentDescription("Edit item"))
                 .inRoot(isDialog())
                 .check(matches(isDisplayed()));
 
-        onView(withText("Delete"))
+        onView(withContentDescription("Delete item"))
+                .inRoot(isDialog())
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
+
+        onView(withContentDescription("Close item details"))
                 .inRoot(isDialog())
                 .check(matches(isDisplayed()));
 
-        onView(withText("Close"))
-                .inRoot(isDialog())
-                .check(matches(isDisplayed()));
-
-        onView(withText("Export this entry"))
+        onView(withContentDescription("Export entry"))
                 .inRoot(isDialog())
                 .perform(scrollTo())
                 .check(matches(isDisplayed()));
@@ -104,10 +105,10 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
         createTestVault();
         createLoginItem("Masked Item", "user@test.com", "Secret123!");
 
-        onView(withText("Masked Item")).perform(click());
+        onView(withContentDescription("Open entry Masked Item")).perform(scrollTo(), click());
 
         onView(withText("••••••••••••")).check(matches(isDisplayed()));
-        onView(withText("Show")).check(matches(isDisplayed()));
+        onView(withContentDescription("Show password")).check(matches(isDisplayed()));
         onView(withContentDescription("Copy password securely"))
                 .check(matches(isDisplayed()));
     }
@@ -117,9 +118,9 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
         createTestVault();
         createLoginItem("Show Hide", "user@test.com", "Secret123!");
 
-        onView(withText("Show Hide")).perform(click());
+        onView(withContentDescription("Open entry Show Hide")).perform(scrollTo(), click());
 
-        onView(withText("Show"))
+        onView(withContentDescription("Show password"))
                 .inRoot(isDialog())
                 .perform(scrollTo(), click());
 
@@ -128,7 +129,7 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
                 .perform(scrollTo())
                 .check(matches(isDisplayed()));
 
-        onView(withText("Hide"))
+        onView(withContentDescription("Hide password"))
                 .inRoot(isDialog())
                 .perform(scrollTo(), click());
 
@@ -146,7 +147,7 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
         onView(withHint("Search title, username, phone, website or notes"))
                 .perform(scrollTo(), replaceText("Searchable"), closeSoftKeyboard());
 
-        onView(withText("Searchable Credential")).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Open entry Searchable Credential")).perform(scrollTo()).check(matches(isDisplayed()));
     }
 
     @Test
@@ -157,7 +158,7 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
         onView(withHint("Search title, username, phone, website or notes"))
                 .perform(scrollTo(), replaceText("does-not-exist"), closeSoftKeyboard());
 
-        onView(withText("No matching categories, subcategories or entries."))
+        onView(withContentDescription("No tree search results"))
                 .perform(scrollTo())
                 .check(matches(isDisplayed()));
     }
@@ -211,11 +212,11 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
         createTestVault();
         createBasicItem("Keep Me");
 
-        onView(withText("Keep Me")).perform(click());
+        onView(withContentDescription("Open entry Keep Me")).perform(scrollTo(), click());
 
-        onView(withText("Delete"))
+        onView(withContentDescription("Delete item"))
                 .inRoot(isDialog())
-                .perform(click());
+                .perform(scrollTo(), click());
 
         onView(withText("Delete item?"))
                 .inRoot(isDialog())
@@ -225,7 +226,7 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
                 .inRoot(isDialog())
                 .perform(click());
 
-        onView(withText("Close"))
+        onView(withContentDescription("Close item details"))
                 .inRoot(isDialog())
                 .perform(click());
 
@@ -239,15 +240,15 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
         createTestVault();
         createBasicItem("Undo Me");
 
-        onView(withText("Undo Me")).perform(click());
+        onView(withContentDescription("Open entry Undo Me")).perform(scrollTo(), click());
 
         onView(withText("Undo Me"))
                 .inRoot(isDialog())
                 .check(matches(isDisplayed()));
 
-        onView(withText("Delete"))
+        onView(withContentDescription("Delete item"))
                 .inRoot(isDialog())
-                .perform(click());
+                .perform(scrollTo(), click());
 
         onView(withText("Delete item?"))
                 .inRoot(isDialog())
@@ -260,6 +261,6 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
         onView(withText("Item deleted")).check(matches(isDisplayed()));
         onView(withText("Undo")).perform(click());
 
-        onView(withText("Undo Me")).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Open entry Undo Me")).perform(scrollTo()).check(matches(isDisplayed()));
     }
 }

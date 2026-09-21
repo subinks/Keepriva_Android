@@ -24,6 +24,7 @@ import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
+import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
@@ -1491,8 +1492,16 @@ public class MainActivity extends Activity {
             }
         }
 
-        if (!query.isEmpty() && homeCategoryTree.getChildCount() == 0) {
-            TextView empty = subtitle("No matching categories, subcategories or entries.");
+        if (query.isEmpty() && allItems.isEmpty()) {
+            TextView empty = subtitle(
+                    "No entries yet. Use + to add an entry or subcategory.");
+            empty.setContentDescription("Empty vault");
+            empty.setPadding(dp(8), dp(16), dp(8), dp(16));
+            homeCategoryTree.addView(empty);
+        } else if (!query.isEmpty() && homeCategoryTree.getChildCount() == 0) {
+            TextView empty = subtitle(
+                    "No matching categories, subcategories or entries.");
+            empty.setContentDescription("No tree search results");
             empty.setPadding(dp(8), dp(16), dp(8), dp(16));
             homeCategoryTree.addView(empty);
         }
@@ -1546,6 +1555,7 @@ public class MainActivity extends Activity {
 
         ImageView icon = new ImageView(this);
         icon.setImageResource(categoryIconFor(categoryName, allCategories));
+        icon.setContentDescription("Category icon " + categoryIconFamily(categoryName, allCategories));
         icon.setPadding(dp(7), dp(7), dp(7), dp(7));
         icon.setBackground(UiStyle.rounded(
                 this, R.color.keepriva_surface_soft, 20));
@@ -1687,17 +1697,57 @@ public class MainActivity extends Activity {
         lp.setMargins(0, dp(3), 0, dp(3));
         container.addView(indent, lp);
     }
+    private String categoryIconFamily(String categoryName, boolean allCategories) {
+        if (allCategories) return "All";
+        String current = safe(categoryName).trim();
+        Set<String> visited = new HashSet<>();
+        while (!current.isEmpty() && visited.add(current.toLowerCase(Locale.ROOT))) {
+            String lower = current.toLowerCase(Locale.ROOT);
+            if ("login".equals(lower)) return "Login";
+            if ("website".equals(lower)) return "Website";
+            if ("app".equals(lower)) return "App";
+            if ("contact".equals(lower)) return "Contact";
+            if ("banking".equals(lower)) return "Banking";
+            if ("work".equals(lower)) return "Work";
+            if ("personal".equals(lower)) return "Personal";
+            if ("secure note".equals(lower)) return "Secure Note";
+            if ("other".equals(lower)) return "Other";
+            CustomCategory custom = findCustomCategory(current);
+            if (custom == null) break;
+            String parent = safe(custom.parentName).trim();
+            if (parent.isEmpty()) return "Custom";
+            current = parent;
+        }
+        return "Custom";
+    }
+
     private int categoryIconFor(String categoryName, boolean allCategories) {
-        if (allCategories) return R.drawable.ic_keepriva_folder;
+        switch (categoryIconFamily(categoryName, allCategories)) {
+            case "All": return R.drawable.ic_keepriva_folder;
+            case "Login": return R.drawable.ic_keepriva_key;
+            case "Website": return R.drawable.ic_keepriva_website;
+            case "App": return R.drawable.ic_keepriva_app;
+            case "Contact": return R.drawable.ic_keepriva_contact;
+            case "Banking": return R.drawable.ic_keepriva_card;
+            case "Work": return R.drawable.ic_keepriva_work;
+            case "Personal": return R.drawable.ic_keepriva_personal;
+            case "Secure Note": return R.drawable.ic_keepriva_note;
+            case "Other": return R.drawable.ic_keepriva_other;
+            default: return R.drawable.ic_keepriva_custom;
+        }
+    }
 
-        String category = safe(categoryName).trim().toLowerCase(Locale.ROOT);
-
-        if ("login".equals(category)) return R.drawable.ic_keepriva_key;
-        if ("banking".equals(category)) return R.drawable.ic_keepriva_card;
-        if ("secure note".equals(category)) return R.drawable.ic_keepriva_note;
-        if ("contact".equals(category)) return R.drawable.ic_keepriva_contact;
-
-        return R.drawable.ic_keepriva_folder;
+    private ImageButton smallIconButton(int iconRes, String description, boolean danger) {
+        ImageButton b = new ImageButton(this);
+        b.setImageResource(iconRes);
+        b.setContentDescription(description);
+        b.setPadding(dp(8), dp(8), dp(8), dp(8));
+        b.setBackground(UiStyle.rounded(this, R.color.keepriva_surface_soft, 18));
+        b.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        b.setClickable(true);
+        b.setFocusable(true);
+        b.setLayoutParams(new LinearLayout.LayoutParams(dp(40), dp(40)));
+        return b;
     }
     private int countItemsForCategory(String categoryName) {
         if ("All".equals(categoryName)) return allItems == null ? 0 : allItems.size();
@@ -1727,6 +1777,7 @@ public class MainActivity extends Activity {
         try {
             allItems = database.list(sessionKey);
             applyFilter();
+            rebuildHomeCategoryTree();
         } catch (Exception e) {
             toast("Could not decrypt vault. Locking for safety.");
             lockVault();
@@ -1734,24 +1785,13 @@ public class MainActivity extends Activity {
     }
 
     private void applyFilter() {
-        if (listContainer == null) return;
-        String query = searchBox == null ? "" : searchBox.getText().toString().trim().toLowerCase(Locale.ROOT);
-        String category = selectedCategoryName(categoryFilter, "All");
-        listContainer.removeAllViews();
-        int shown = 0;
-        for (VaultItem item : allItems) {
-            if (!"All".equals(category) && !isDescendantOf(item.category, category)) continue;
-            if (!query.isEmpty() && !searchText(item).contains(query)) continue;
-            listContainer.addView(itemCard(item));
-            shown++;
-        }
-        if (shown == 0) {
-            TextView empty = subtitle(allItems.isEmpty() ? "No items yet. Tap Add item to create your first credential or note." : "No matching items.");
-            empty.setPadding(dp(8), dp(24), dp(8), dp(24));
-            listContainer.addView(empty);
+        // categoryFilter remains the logical selection used by export code.
+        // Do not render a second hidden item list: the expandable tree is the
+        // single source of truth for visible home content.
+        if (listContainer != null) {
+            listContainer.removeAllViews();
         }
     }
-
     private String searchText(VaultItem i) {
         StringBuilder text = new StringBuilder(safe(i.title)).append(' ').append(safe(i.category)).append(' ')
                 .append(safe(i.username)).append(' ').append(safe(i.phone1)).append(' ').append(safe(i.phone2)).append(' ')
@@ -1825,7 +1865,8 @@ public class MainActivity extends Activity {
             }
         }
 
-        Button exportEntry = button("Export this entry");
+        ImageButton exportEntry = smallIconButton(R.drawable.ic_keepriva_export,
+                "Export entry", false);
         exportEntry.setOnClickListener(v -> showExportFormatChooser(Collections.singletonList(item), item.title));
         body.addView(exportEntry);
 
@@ -1839,33 +1880,44 @@ public class MainActivity extends Activity {
             pw.setTextSize(17);
             pw.setPadding(0, dp(4), dp(8), dp(8));
             pwRow.addView(pw, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
-            Button show = button("Show");
+            ImageButton show = smallIconButton(R.drawable.ic_keepriva_visibility,
+                    "Show password", false);
             final boolean[] visible = {false};
             show.setOnClickListener(v -> {
                 visible[0] = !visible[0];
                 pw.setText(visible[0] ? item.password : "••••••••••••");
-                show.setText(visible[0] ? "Hide" : "Show");
+                show.setImageResource(visible[0] ? R.drawable.ic_keepriva_visibility_off : R.drawable.ic_keepriva_visibility);
+                show.setContentDescription(visible[0] ? "Hide password" : "Show password");
             });
             pwRow.addView(show);
-            Button copy = button("Copy");
-            copy.setContentDescription("Copy password securely");
+            ImageButton copy = smallIconButton(R.drawable.ic_keepriva_copy,
+                    "Copy password securely", false);
             copy.setOnClickListener(v -> copyPasswordToClipboard(item.password));
             pwRow.addView(copy);
             body.addView(pwRow);
         }
         addNonEmptyLabelValue(body, "Notes", item.notes);
 
+        LinearLayout detailActions = new LinearLayout(this);
+        detailActions.setOrientation(LinearLayout.HORIZONTAL);
+        detailActions.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+        detailActions.setPadding(0, dp(10), 0, 0);
+
+        ImageButton editItem = smallIconButton(R.drawable.ic_keepriva_edit, "Edit item", false);
+        ImageButton deleteItem = smallIconButton(R.drawable.ic_keepriva_delete, "Delete item", true);
+        ImageButton closeDetails = smallIconButton(R.drawable.ic_keepriva_close, "Close item details", false);
+        detailActions.addView(editItem);
+        LinearLayout.LayoutParams dp1 = new LinearLayout.LayoutParams(dp(40), dp(40)); dp1.leftMargin = dp(8); detailActions.addView(deleteItem, dp1);
+        LinearLayout.LayoutParams cp1 = new LinearLayout.LayoutParams(dp(40), dp(40)); cp1.leftMargin = dp(8); detailActions.addView(closeDetails, cp1);
+        body.addView(detailActions, matchWidth());
+
         AlertDialog d = new AlertDialog.Builder(this)
                 .setTitle(item.title.isEmpty() ? "Vault item" : item.title)
                 .setView(wrap(body))
-                .setPositiveButton("Edit", null)
-                .setNeutralButton("Delete", null)
-                .setNegativeButton("Close", null)
                 .create();
-        d.setOnShowListener(x -> {
-            d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> { d.dismiss(); showEditDialog(item); });
-            d.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v -> confirmDelete(item, d));
-        });
+        editItem.setOnClickListener(v -> { d.dismiss(); showEditDialog(item); });
+        deleteItem.setOnClickListener(v -> confirmDelete(item, d));
+        closeDetails.setOnClickListener(v -> d.dismiss());
         ScreenSecurityManager.protect(d);
         d.show();
     }
@@ -2345,6 +2397,13 @@ public class MainActivity extends Activity {
     private void addBuiltInCategoryTreeRow(LinearLayout body, String name) {
         LinearLayout card = UiStyle.verticalCard(this, 12);
 
+        ImageView icon = new ImageView(this);
+        icon.setImageResource(categoryIconFor(name, false));
+        icon.setContentDescription("Category icon " + categoryIconFamily(name, false));
+        icon.setPadding(dp(7), dp(7), dp(7), dp(7));
+        icon.setBackground(UiStyle.rounded(this, R.color.keepriva_surface_soft, 20));
+        card.addView(icon, new LinearLayout.LayoutParams(dp(40), dp(40)));
+
         TextView title = new TextView(this);
         title.setText(name);
         title.setTextSize(16);
@@ -2394,6 +2453,13 @@ public class MainActivity extends Activity {
 
         LinearLayout card = UiStyle.verticalCard(this, 12);
 
+        ImageView categoryIcon = new ImageView(this);
+        categoryIcon.setImageResource(categoryIconFor(category.name, false));
+        categoryIcon.setContentDescription("Category icon " + categoryIconFamily(category.name, false));
+        categoryIcon.setPadding(dp(7), dp(7), dp(7), dp(7));
+        categoryIcon.setBackground(UiStyle.rounded(this, R.color.keepriva_surface_soft, 20));
+        card.addView(categoryIcon, new LinearLayout.LayoutParams(dp(40), dp(40)));
+
         TextView title = new TextView(this);
         title.setText(category.name + "  •  " + category.fields.size() + " fields");
         title.setTextSize(15);
@@ -2413,16 +2479,16 @@ public class MainActivity extends Activity {
         actions.setOrientation(LinearLayout.HORIZONTAL);
         actions.setGravity(Gravity.END);
 
-        Button edit = button("Edit / Move");
-        UiStyle.styleCompactButton(edit);
+        ImageButton edit = smallIconButton(R.drawable.ic_keepriva_edit,
+                "Edit category " + category.name, false);
         edit.setOnClickListener(v -> {
             AlertDialog parentDialog = findShowingDialogForView(v);
             if (parentDialog != null) parentDialog.dismiss();
             showCustomCategoryEditor(category);
         });
 
-        Button del = button("Delete");
-        UiStyle.styleDangerButton(del);
+        ImageButton del = smallIconButton(R.drawable.ic_keepriva_delete,
+                "Delete category " + category.name, true);
         del.setOnClickListener(v -> {
             AlertDialog parentDialog = findShowingDialogForView(v);
             if (parentDialog != null) parentDialog.dismiss();
@@ -2430,9 +2496,7 @@ public class MainActivity extends Activity {
         });
 
         actions.addView(edit);
-        LinearLayout.LayoutParams delParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT);
+        LinearLayout.LayoutParams delParams = new LinearLayout.LayoutParams(dp(40), dp(40));
         delParams.leftMargin = dp(8);
         actions.addView(del, delParams);
 

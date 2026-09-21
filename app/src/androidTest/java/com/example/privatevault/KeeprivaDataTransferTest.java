@@ -202,8 +202,8 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
         createTestVault();
         createBasicItem("Export Safe Item");
 
-        onView(withText("Export Safe Item")).perform(click());
-        onView(withText("Export this entry"))
+        onView(withContentDescription("Open entry Export Safe Item")).perform(scrollTo(), click());
+        onView(withContentDescription("Export entry"))
                 .inRoot(isDialog())
                 .perform(scrollTo(), click());
         onView(withText("Continue")).perform(click());
@@ -219,8 +219,8 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
         createTestVault();
         createLoginItem("Sensitive Export", "user@test.com", "Secret123!");
 
-        onView(withText("Sensitive Export")).perform(click());
-        onView(withText("Export this entry"))
+        onView(withContentDescription("Open entry Sensitive Export")).perform(scrollTo(), click());
+        onView(withContentDescription("Export entry"))
                 .inRoot(isDialog())
                 .perform(scrollTo(), click());
         onView(withText("Include passwords")).perform(click());
@@ -235,8 +235,8 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
         createTestVault();
         createLoginItem("Wrong Export Password", "user@test.com", "Secret123!");
 
-        onView(withText("Wrong Export Password")).perform(click());
-        onView(withText("Export this entry"))
+        onView(withContentDescription("Open entry Wrong Export Password")).perform(scrollTo(), click());
+        onView(withContentDescription("Export entry"))
                 .inRoot(isDialog())
                 .perform(scrollTo(), click());
         onView(withText("Include passwords")).perform(click());
@@ -254,8 +254,8 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
         createTestVault();
         createLoginItem("Correct Export Password", "user@test.com", "Secret123!");
 
-        onView(withText("Correct Export Password")).perform(click());
-        onView(withText("Export this entry"))
+        onView(withContentDescription("Open entry Correct Export Password")).perform(scrollTo(), click());
+        onView(withContentDescription("Export entry"))
                 .inRoot(isDialog())
                 .perform(scrollTo(), click());
         onView(withText("Include passwords")).perform(click());

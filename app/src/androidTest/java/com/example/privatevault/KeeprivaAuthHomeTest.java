@@ -123,7 +123,7 @@ public class KeeprivaAuthHomeTest extends KeeprivaTestBase {
     @Test
     public void emptyVault_showsEmptyState() {
         createTestVault();
-        onView(withText("No items yet. Tap Add item to create your first credential or note."))
+        onView(withContentDescription("Empty vault"))
                 .perform(scrollTo())
                 .check(matches(isDisplayed()));
     }

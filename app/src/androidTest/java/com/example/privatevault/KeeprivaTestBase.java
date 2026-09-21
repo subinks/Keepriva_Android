@@ -319,9 +319,11 @@ public abstract class KeeprivaTestBase {
         onView(withContentDescription("Open category " + label))
                 .perform(scrollTo(), performClickDirectly());
 
-        waitForUiState("expanded category " + label, view ->
-                ("Close category " + label).contentEquals(
-                        view.getContentDescription()));
+        waitForUiState("expanded category " + label, view -> {
+            CharSequence description = view.getContentDescription();
+            return description != null
+                    && ("Close category " + label).contentEquals(description);
+        });
     }
     /**
      * Invokes a view's registered OnClickListener directly on the UI thread.

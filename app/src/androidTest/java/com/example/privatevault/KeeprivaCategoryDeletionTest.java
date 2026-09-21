@@ -8,13 +8,11 @@ import static androidx.test.espresso.action.ViewActions.scrollTo;
 import static androidx.test.espresso.assertion.ViewAssertions.doesNotExist;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.RootMatchers.isDialog;
+import static androidx.test.espresso.matcher.RootMatchers.isPlatformPopup;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;
 import static androidx.test.espresso.matcher.ViewMatchers.withHint;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
-import static org.hamcrest.Matchers.allOf;
-
-import android.widget.EditText;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.filters.LargeTest;
@@ -119,7 +117,9 @@ public class KeeprivaCategoryDeletionTest extends KeeprivaTestBase {
     private void createSubcategory(String parent, String child) {
         onView(withContentDescription("Open category " + parent)).perform(scrollTo(), click());
         onView(withContentDescription("Add entry or subcategory")).perform(scrollTo(), click());
-        onView(withText("Sub Category")).perform(click());
+        onView(withText("Sub Category"))
+                .inRoot(isPlatformPopup())
+                .perform(click());
         onView(withHint("Category name"))
                 .perform(replaceText(child), closeSoftKeyboard());
         onView(withText("Save")).perform(click());
@@ -130,10 +130,10 @@ public class KeeprivaCategoryDeletionTest extends KeeprivaTestBase {
     private void createEntryInCategory(String category, String title) {
         onView(withContentDescription("Open category " + category)).perform(scrollTo(), click());
         onView(withContentDescription("Add entry or subcategory")).perform(scrollTo(), click());
-        onView(withText("Entry")).perform(click());
-        onView(withIndex(allOf(
-                androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom(EditText.class),
-                isDisplayed()), 0))
+        onView(withText("Entry"))
+                .inRoot(isPlatformPopup())
+                .perform(click());
+        onView(withContentDescription("Item title"))
                 .perform(replaceText(title), closeSoftKeyboard());
         onView(withText("Save")).perform(click());
         onView(withContentDescription("Open entry " + title))

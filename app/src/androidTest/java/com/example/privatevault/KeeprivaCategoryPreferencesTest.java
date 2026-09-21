@@ -56,7 +56,7 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
         createFolderCategory("Folder Only");
 
         onView(withContentDescription("Manage categories")).perform(scrollTo(), click());
-        onView(withText("Folder Only  â€¢  0 fields"))
+        onView(withContentDescription("Category row Folder Only"))
                 .inRoot(isDialog())
                 .perform(scrollTo())
                 .check(matches(isDisplayed()));
@@ -110,10 +110,19 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
         onView(withText("Save")).perform(click());
 
         onView(withContentDescription("Manage categories")).perform(scrollTo(), click());
-        onView(withText("Membership  â€¢  2 fields"))
+        onView(withContentDescription("Category row Membership"))
                 .inRoot(isDialog())
                 .perform(scrollTo())
                 .check(matches(isDisplayed()));
+
+        onView(withContentDescription("Edit category Membership"))
+                .inRoot(isDialog())
+                .perform(scrollTo(), click());
+        onView(withHint("Field names - one per line (optional for folder categories)"))
+                .check(matches(withText("Member ID\nPIN")));
+        onView(withHint("Sensitive field names - one per line (optional)"))
+                .check(matches(withText("PIN")));
+        onView(withText("Cancel")).inRoot(isDialog()).perform(click());
     }
 
     @Test
@@ -186,7 +195,7 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
                 .check(matches(isDisplayed()));
 
         onView(allOf(
-                withText("Category â€¢ 1 entry"),
+                withText("Category • 1 entry"),
                 hasSibling(withText("Login"))))
                 .perform(scrollTo())
                 .check(matches(isDisplayed()));

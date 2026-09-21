@@ -86,9 +86,10 @@ public class KeeprivaAuthHomeTest extends KeeprivaTestBase {
     public void homeAdditionalActions_canBeScrolledIntoView() {
         createTestVault();
 
+        // Assert the top header before scrolling the home view downward.
+        onView(withContentDescription("Lock vault")).check(matches(isDisplayed()));
         onView(withText("Preferences")).perform(scrollTo()).check(matches(isDisplayed()));
         onView(withText("Security")).perform(scrollTo()).check(matches(isDisplayed()));
-        onView(withContentDescription("Lock vault")).check(matches(isDisplayed()));
     }
 
     @Test

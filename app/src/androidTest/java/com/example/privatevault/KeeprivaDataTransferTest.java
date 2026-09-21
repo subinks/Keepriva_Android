@@ -56,8 +56,8 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
 
         onView(withContentDescription("Import")).perform(scrollTo(), click());
 
-        onView(withText("Step 1 — Save JSON import template")).check(matches(isDisplayed()));
-        onView(withText("Step 2 — Import completed JSON template")).check(matches(isDisplayed()));
+        onView(withContentDescription("Download JSON import template")).check(matches(isDisplayed()));
+        onView(withContentDescription("Import completed JSON template")).check(matches(isDisplayed()));
     }
 
     @Test
@@ -69,7 +69,7 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
                         Activity.RESULT_CANCELED, null));
 
         onView(withContentDescription("Import")).perform(scrollTo(), click());
-        onView(withText("Step 1 — Save JSON import template")).perform(click());
+        onView(withContentDescription("Download JSON import template")).perform(click());
 
         intended(allOf(
                 hasAction(Intent.ACTION_CREATE_DOCUMENT),
@@ -86,7 +86,7 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
                         Activity.RESULT_CANCELED, null));
 
         onView(withContentDescription("Import")).perform(scrollTo(), click());
-        onView(withText("Step 2 — Import completed JSON template")).perform(click());
+        onView(withContentDescription("Import completed JSON template")).perform(click());
 
         intended(allOf(
                 hasAction(Intent.ACTION_OPEN_DOCUMENT),
@@ -208,7 +208,7 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
                 .perform(scrollTo(), click());
         onView(withText("Continue")).perform(click());
 
-        onView(withText("Keepriva JSON (.json) — re-importable")).check(matches(isDisplayed()));
+        onView(withContentDescription("Export Keepriva JSON")).check(matches(isDisplayed()));
         onView(withText("Formatted text (.txt)")).check(matches(isDisplayed()));
         onView(withText("HTML page (.html)")).check(matches(isDisplayed()));
         onView(withText("PDF document (.pdf)")).check(matches(isDisplayed()));
@@ -265,7 +265,7 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
                 .perform(replaceText(TEST_PASSWORD), closeSoftKeyboard());
         onView(withText("Authenticate")).perform(click());
 
-        onView(withText("Keepriva JSON (.json) — re-importable")).check(matches(isDisplayed()));
+        onView(withContentDescription("Export Keepriva JSON")).check(matches(isDisplayed()));
         onView(withText("Formatted text (.txt)")).check(matches(isDisplayed()));
         onView(withText("HTML page (.html)")).check(matches(isDisplayed()));
         onView(withText("PDF document (.pdf)")).check(matches(isDisplayed()));

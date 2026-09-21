@@ -189,9 +189,9 @@ public class KeeprivaUiSmokeTest {
 
         onView(withContentDescription("Import")).perform(scrollTo(), click());
 
-        onView(withText("Step 1 â€” Save JSON import template"))
+        onView(withContentDescription("Download JSON import template"))
                 .check(matches(isDisplayed()));
-        onView(withText("Step 2 â€” Import completed JSON template"))
+        onView(withContentDescription("Import completed JSON template"))
                 .check(matches(isDisplayed()));
     }
 

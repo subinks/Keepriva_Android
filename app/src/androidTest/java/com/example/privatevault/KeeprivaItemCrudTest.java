@@ -107,7 +107,7 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
 
         onView(withContentDescription("Open entry Masked Item")).perform(scrollTo(), click());
 
-        onView(withText("••••••••••••")).check(matches(isDisplayed()));
+        onView(withContentDescription("Masked password")).check(matches(isDisplayed()));
         onView(withContentDescription("Show password")).check(matches(isDisplayed()));
         onView(withContentDescription("Copy password securely"))
                 .check(matches(isDisplayed()));
@@ -124,16 +124,16 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
                 .inRoot(isDialog())
                 .perform(scrollTo(), click());
 
-        onView(withText("Secret123!"))
+        onView(withContentDescription("Visible password"))
                 .inRoot(isDialog())
                 .perform(scrollTo())
-                .check(matches(isDisplayed()));
+                .check(matches(withText("Secret123!")));
 
         onView(withContentDescription("Hide password"))
                 .inRoot(isDialog())
                 .perform(scrollTo(), click());
 
-        onView(withText("••••••••••••"))
+        onView(withContentDescription("Masked password"))
                 .inRoot(isDialog())
                 .perform(scrollTo())
                 .check(matches(isDisplayed()));

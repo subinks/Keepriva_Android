@@ -329,7 +329,7 @@ public class MainActivity extends Activity {
 
             pass.setEnabled(false);
             unlock.setEnabled(false);
-            unlock.setText("Unlockingâ€¦");
+            unlock.setText("Unlocking…");
             progress.setVisibility(View.VISIBLE);
             unlockInBackground(entered, pass, unlock, progress);
         };
@@ -347,7 +347,7 @@ public class MainActivity extends Activity {
         root.addView(authCard, matchWidth());
 
         TextView footer = new TextView(this);
-        footer.setText("Fully offline  â€¢  Secure  â€¢  Private");
+        footer.setText("Fully offline  •  Secure  •  Private");
         footer.setTextColor(Color.argb(195, 255, 255, 255));
         footer.setTextSize(12);
         footer.setGravity(Gravity.CENTER);
@@ -1229,7 +1229,7 @@ public class MainActivity extends Activity {
         identity.addView(appTitle);
 
         TextView appSubtitle = new TextView(this);
-        appSubtitle.setText("Private vault â€¢ Offline by design");
+        appSubtitle.setText("Private vault • Offline by design");
         appSubtitle.setTextColor(Color.argb(205, 255, 255, 255));
         appSubtitle.setTextSize(13);
         identity.addView(appSubtitle);
@@ -1426,7 +1426,7 @@ public class MainActivity extends Activity {
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
 
         TextView arrow = new TextView(this);
-        arrow.setText("â€º");
+        arrow.setText("›");
         arrow.setTextSize(28);
         arrow.setTextColor(getColor(R.color.keepriva_text_secondary));
         arrow.setGravity(Gravity.CENTER);
@@ -1583,7 +1583,7 @@ public class MainActivity extends Activity {
         int count = allCategories ? allItems.size() : countItemsForCategory(categoryName);
         TextView countView = new TextView(this);
         countView.setText((depth == 0 ? "Category" : "Subcategory")
-                + " â€¢ " + count + (count == 1 ? " entry" : " entries"));
+                + " • " + count + (count == 1 ? " entry" : " entries"));
         countView.setTextSize(13);
         countView.setTextColor(getColor(R.color.keepriva_text_secondary));
         text.addView(countView);
@@ -1592,7 +1592,7 @@ public class MainActivity extends Activity {
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
 
         TextView arrow = new TextView(this);
-        arrow.setText(expanded ? "âŒ„" : "â€º");
+        arrow.setText(expanded ? "⌄" : "›");
         arrow.setTextSize(26);
         arrow.setTextColor(getColor(R.color.keepriva_text_secondary));
         arrow.setGravity(Gravity.CENTER);
@@ -1816,7 +1816,7 @@ public class MainActivity extends Activity {
         title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         title.setTextColor(getColor(R.color.keepriva_text_primary));
         card.addView(title);
-        TextView cat = subtitle(categoryPath(item.category) + (item.username.isEmpty() ? "" : "  â€¢  " + item.username));
+        TextView cat = subtitle(categoryPath(item.category) + (item.username.isEmpty() ? "" : "  •  " + item.username));
         card.addView(cat);
         UiStyle.styleCard(card);
         card.setOnClickListener(v -> showDetails(item));
@@ -1882,7 +1882,8 @@ public class MainActivity extends Activity {
             LinearLayout pwRow = new LinearLayout(this);
             pwRow.setOrientation(LinearLayout.HORIZONTAL);
             TextView pw = new TextView(this);
-            pw.setText("â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢");
+            pw.setText("••••••••••••");
+            pw.setContentDescription("Masked password");
             pw.setTextSize(17);
             pw.setPadding(0, dp(4), dp(8), dp(8));
             pwRow.addView(pw, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
@@ -1891,7 +1892,8 @@ public class MainActivity extends Activity {
             final boolean[] visible = {false};
             show.setOnClickListener(v -> {
                 visible[0] = !visible[0];
-                pw.setText(visible[0] ? item.password : "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢");
+                pw.setText(visible[0] ? item.password : "••••••••••••");
+                pw.setContentDescription(visible[0] ? "Visible password" : "Masked password");
                 show.setImageResource(visible[0] ? R.drawable.ic_keepriva_visibility_off : R.drawable.ic_keepriva_visibility);
                 show.setContentDescription(visible[0] ? "Hide password" : "Show password");
             });
@@ -1983,6 +1985,7 @@ public class MainActivity extends Activity {
         VaultItem item = existing == null ? new VaultItem() : existing;
         LinearLayout form = baseVertical(6);
         EditText title = field("Title", item.title);
+        title.setContentDescription("Item title");
         Spinner category = new Spinner(this);
         CategoryOption[] editableCats = getEditableCategories();
         category.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, editableCats));
@@ -2685,8 +2688,13 @@ public class MainActivity extends Activity {
             destructive.setContentDescription("Delete category and all contents");
             destructive.setOnClickListener(v -> {
                 dialog.dismiss();
-                confirmForceDeleteCategory(categoryName, customCategory, subtreeNames,
-                        totalItemCount, descendantCount);
+                new android.os.Handler(android.os.Looper.getMainLooper()).post(() ->
+                        confirmForceDeleteCategory(
+                                categoryName,
+                                customCategory,
+                                subtreeNames,
+                                totalItemCount,
+                                descendantCount));
             });
         });
         ScreenSecurityManager.protect(dialog);
@@ -2917,7 +2925,8 @@ public class MainActivity extends Activity {
                         : "Safe export: passwords and sensitive custom fields will be omitted.");
         box.addView(warning);
 
-        Button json = primaryButton("Keepriva JSON (.json) â€” re-importable");
+        Button json = primaryButton("Keepriva JSON (.json) — re-importable");
+        json.setContentDescription("Export Keepriva JSON");
         Button txt = button("Formatted text (.txt)");
         Button html = button("HTML page (.html)");
         Button pdf = button("PDF document (.pdf)");
@@ -3221,8 +3230,11 @@ public class MainActivity extends Activity {
                 this, R.color.keepriva_surface_soft, R.color.keepriva_outline, 12));
         box.addView(steps, matchWidth());
 
-        Button download = button("Step 1 â€” Save JSON import template");
-        Button importFile = primaryButton("Step 2 â€” Import completed JSON template");
+        Button download = button("Step 1 — Save JSON import template");
+        Button importFile = primaryButton("Step 2 — Import completed JSON template");
+
+        download.setContentDescription("Download JSON import template");
+        importFile.setContentDescription("Import completed JSON template");
 
         LinearLayout.LayoutParams first = matchWidth();
         first.topMargin = dp(10);
@@ -3298,8 +3310,8 @@ public class MainActivity extends Activity {
         if (!parsed.warnings.isEmpty()) {
             message.append("\n\nWarnings:");
             int limit = Math.min(parsed.warnings.size(), 8);
-            for (int i = 0; i < limit; i++) message.append("\nâ€¢ ").append(parsed.warnings.get(i));
-            if (parsed.warnings.size() > limit) message.append("\nâ€¢ â€¦ and ").append(parsed.warnings.size() - limit).append(" more");
+            for (int i = 0; i < limit; i++) message.append("\n• ").append(parsed.warnings.get(i));
+            if (parsed.warnings.size() > limit) message.append("\n• … and ").append(parsed.warnings.size() - limit).append(" more");
         }
         List<CustomCategory> hierarchyPreview = new ArrayList<>(customCategories);
         hierarchyPreview.addAll(parsed.categoriesToCreate);
@@ -3309,8 +3321,8 @@ public class MainActivity extends Activity {
         if (!parsed.errors.isEmpty()) {
             message.append("\n\nErrors:");
             int limit = Math.min(parsed.errors.size(), 8);
-            for (int i = 0; i < limit; i++) message.append("\nâ€¢ ").append(parsed.errors.get(i));
-            if (parsed.errors.size() > limit) message.append("\nâ€¢ â€¦ and ").append(parsed.errors.size() - limit).append(" more");
+            for (int i = 0; i < limit; i++) message.append("\n• ").append(parsed.errors.get(i));
+            if (parsed.errors.size() > limit) message.append("\n• … and ").append(parsed.errors.size() - limit).append(" more");
             new AlertDialog.Builder(this).setTitle("Import validation failed")
                     .setMessage(message.toString()).setPositiveButton("Close", null).show();
             return;
@@ -3320,7 +3332,7 @@ public class MainActivity extends Activity {
                     .setMessage(message.toString()).setPositiveButton("Close", null).show();
             return;
         }
-        message.append("\n\nOn import, all entry fieldsâ€”including fields marked sensitiveâ€”are encrypted before being written to the local vault database.");
+        message.append("\n\nOn import, all entry fields—including fields marked sensitive—are encrypted before being written to the local vault database.");
         new AlertDialog.Builder(this).setTitle("Import preview")
                 .setMessage(message.toString())
                 .setPositiveButton("Import", (d, w) -> commitImport(parsed))
@@ -3450,7 +3462,7 @@ public class MainActivity extends Activity {
 
     private TextView subtitle(String text) {
         TextView v = new TextView(this);
-        v.setText(text == null || text.isEmpty() ? "â€”" : text);
+        v.setText(text == null || text.isEmpty() ? "—" : text);
         v.setTextSize(15);
         v.setPadding(0, dp(2), 0, dp(10));
         UiStyle.styleBodyText(v);
@@ -3483,7 +3495,7 @@ public class MainActivity extends Activity {
         row.setGravity(Gravity.CENTER_VERTICAL);
 
         TextView display = new TextView(this);
-        display.setText("â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢");
+        display.setText("••••••••••••");
         display.setTextSize(17);
         display.setPadding(0, dp(4), dp(8), dp(8));
         UiStyle.styleBodyText(display);
@@ -3493,7 +3505,7 @@ public class MainActivity extends Activity {
         Button show = button("Show");
         show.setOnClickListener(v -> {
             visible[0] = !visible[0];
-            display.setText(visible[0] ? value : "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢");
+            display.setText(visible[0] ? value : "••••••••••••");
             show.setText(visible[0] ? "Hide" : "Show");
         });
         row.addView(show);

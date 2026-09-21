@@ -109,16 +109,24 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
         createTestVault();
 
         onView(withContentDescription("Backup & Restore")).perform(scrollTo(), click());
-        onView(withText("Create encrypted .pvault backup")).perform(click());
+        onView(withText("Create encrypted .pvault backup"))
+                .inRoot(isDialog())
+                .perform(click());
 
         onView(withHint("Backup password (10+ characters)"))
+                .inRoot(isDialog())
                 .perform(replaceText("short"), closeSoftKeyboard());
         onView(withHint("Confirm backup password"))
+                .inRoot(isDialog())
                 .perform(replaceText("short"), closeSoftKeyboard());
 
-        onView(withText("Continue")).perform(click());
+        onView(withText("Continue"))
+                .inRoot(isDialog())
+                .perform(click());
 
-        onView(withText("Continue")).check(matches(isDisplayed()));
+        onView(withText("Continue"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
     }
 
     @Test
@@ -126,16 +134,24 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
         createTestVault();
 
         onView(withContentDescription("Backup & Restore")).perform(scrollTo(), click());
-        onView(withText("Create encrypted .pvault backup")).perform(click());
+        onView(withText("Create encrypted .pvault backup"))
+                .inRoot(isDialog())
+                .perform(click());
 
         onView(withHint("Backup password (10+ characters)"))
+                .inRoot(isDialog())
                 .perform(replaceText("BackupPass123!"), closeSoftKeyboard());
         onView(withHint("Confirm backup password"))
+                .inRoot(isDialog())
                 .perform(replaceText("DifferentPass123!"), closeSoftKeyboard());
 
-        onView(withText("Continue")).perform(click());
+        onView(withText("Continue"))
+                .inRoot(isDialog())
+                .perform(click());
 
-        onView(withText("Continue")).check(matches(isDisplayed()));
+        onView(withText("Continue"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
     }
 
     @Test

@@ -61,6 +61,7 @@ public class KeeprivaCategoryDeletionTest extends KeeprivaTestBase {
                 .inRoot(isDialog()).perform(click());
         onView(withContentDescription("Cancel permanent category deletion"))
                 .inRoot(isDialog()).perform(click());
+        waitForActivityWindowFocus();
         waitForHomeScreen();
 
         openCategoryManager();
@@ -82,6 +83,7 @@ public class KeeprivaCategoryDeletionTest extends KeeprivaTestBase {
                 .inRoot(isDialog()).perform(click());
         onView(withContentDescription("Confirm permanent category deletion"))
                 .inRoot(isDialog()).perform(click());
+        waitForActivityWindowFocus();
         waitForHomeScreen();
 
         onView(withContentDescription("Open category Cascade Root")).check(doesNotExist());
@@ -102,6 +104,7 @@ public class KeeprivaCategoryDeletionTest extends KeeprivaTestBase {
                 .inRoot(isDialog()).perform(click());
         onView(withContentDescription("Confirm permanent category deletion"))
                 .inRoot(isDialog()).perform(click());
+        waitForActivityWindowFocus();
         waitForHomeScreen();
 
         onView(withContentDescription("Open category Login")).check(doesNotExist());
@@ -115,7 +118,8 @@ public class KeeprivaCategoryDeletionTest extends KeeprivaTestBase {
     }
 
     private void openCategoryManager() {
-        onView(withContentDescription("Manage categories")).perform(scrollTo(), click());
+        onView(withContentDescription("Manage categories"))
+                .perform(scrollTo(), performClickDirectly());
         onView(withContentDescription("Close category manager"))
                 .inRoot(isDialog()).check(matches(isDisplayed()));
     }

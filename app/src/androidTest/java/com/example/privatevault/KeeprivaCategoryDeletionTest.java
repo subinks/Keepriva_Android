@@ -59,7 +59,9 @@ public class KeeprivaCategoryDeletionTest extends KeeprivaTestBase {
                 .inRoot(isDialog()).perform(scrollTo(), click());
         onView(withContentDescription("Delete category and all contents"))
                 .inRoot(isDialog()).perform(click());
-        onView(withText("Cancel")).inRoot(isDialog()).perform(click());
+        onView(withContentDescription("Cancel permanent category deletion"))
+                .inRoot(isDialog()).perform(click());
+        waitForHomeScreen();
 
         openCategoryManager();
         onView(withContentDescription("Delete category Keep Cascade"))
@@ -78,7 +80,9 @@ public class KeeprivaCategoryDeletionTest extends KeeprivaTestBase {
                 .inRoot(isDialog()).perform(scrollTo(), click());
         onView(withContentDescription("Delete category and all contents"))
                 .inRoot(isDialog()).perform(click());
-        onView(withText("Delete permanently")).inRoot(isDialog()).perform(click());
+        onView(withContentDescription("Confirm permanent category deletion"))
+                .inRoot(isDialog()).perform(click());
+        waitForHomeScreen();
 
         onView(withContentDescription("Open category Cascade Root")).check(doesNotExist());
         onView(withContentDescription("Open category Cascade Child")).check(doesNotExist());
@@ -96,7 +100,9 @@ public class KeeprivaCategoryDeletionTest extends KeeprivaTestBase {
                 .inRoot(isDialog()).perform(scrollTo(), click());
         onView(withContentDescription("Delete category and all contents"))
                 .inRoot(isDialog()).perform(click());
-        onView(withText("Delete permanently")).inRoot(isDialog()).perform(click());
+        onView(withContentDescription("Confirm permanent category deletion"))
+                .inRoot(isDialog()).perform(click());
+        waitForHomeScreen();
 
         onView(withContentDescription("Open category Login")).check(doesNotExist());
         onView(withHint("Search title, username, phone, website or notes"))
@@ -115,8 +121,9 @@ public class KeeprivaCategoryDeletionTest extends KeeprivaTestBase {
     }
 
     private void createSubcategory(String parent, String child) {
-        onView(withContentDescription("Open category " + parent)).perform(scrollTo(), click());
-        onView(withContentDescription("Add entry or subcategory")).perform(scrollTo(), click());
+        selectHomeCategory(parent);
+        onView(withContentDescription("Add entry or subcategory"))
+                .perform(scrollTo(), performClickDirectly());
         onView(withText("Sub Category"))
                 .inRoot(isPlatformPopup())
                 .perform(click());
@@ -128,8 +135,9 @@ public class KeeprivaCategoryDeletionTest extends KeeprivaTestBase {
     }
 
     private void createEntryInCategory(String category, String title) {
-        onView(withContentDescription("Open category " + category)).perform(scrollTo(), click());
-        onView(withContentDescription("Add entry or subcategory")).perform(scrollTo(), click());
+        selectHomeCategory(category);
+        onView(withContentDescription("Add entry or subcategory"))
+                .perform(scrollTo(), performClickDirectly());
         onView(withText("Entry"))
                 .inRoot(isPlatformPopup())
                 .perform(click());

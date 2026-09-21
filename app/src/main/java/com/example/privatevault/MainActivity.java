@@ -2686,16 +2686,14 @@ public class MainActivity extends Activity {
             Button destructive = dialog.getButton(AlertDialog.BUTTON_NEUTRAL);
             destructive.setTextColor(getColor(R.color.keepriva_danger));
             destructive.setContentDescription("Delete category and all contents");
-            destructive.setOnClickListener(v -> {
-                dialog.dismiss();
-                new android.os.Handler(android.os.Looper.getMainLooper()).post(() ->
-                        confirmForceDeleteCategory(
-                                categoryName,
-                                customCategory,
-                                subtreeNames,
-                                totalItemCount,
-                                descendantCount));
-            });
+            destructive.setOnClickListener(v ->
+                    confirmForceDeleteCategory(
+                            categoryName,
+                            customCategory,
+                            subtreeNames,
+                            totalItemCount,
+                            descendantCount,
+                            dialog));
         });
         ScreenSecurityManager.protect(dialog);
         dialog.show();
@@ -2728,7 +2726,8 @@ public class MainActivity extends Activity {
                                             CustomCategory customCategory,
                                             Set<String> subtreeNames,
                                             int itemCount,
-                                            int descendantCount) {
+                                            int descendantCount,
+                                            AlertDialog parentDialog) {
         AlertDialog confirm = new AlertDialog.Builder(this)
                 .setTitle("Permanently delete subtree?")
                 .setMessage("This permanently deletes " + itemCount
@@ -2736,13 +2735,20 @@ public class MainActivity extends Activity {
                         + descendantCount
                         + (descendantCount == 1 ? " subcategory." : " subcategories.")
                         + " This action cannot be undone.")
-                .setPositiveButton("Delete permanently", (d, w) ->
-                        performCategorySubtreeDelete(categoryName, customCategory, subtreeNames))
-                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Delete permanently", (d, w) -> {
+                    parentDialog.dismiss();
+                    performCategorySubtreeDelete(categoryName, customCategory, subtreeNames);
+                })
+                .setNegativeButton("Cancel", (d, w) -> parentDialog.dismiss())
                 .create();
-        confirm.setOnShowListener(ignored ->
-                confirm.getButton(AlertDialog.BUTTON_POSITIVE)
-                        .setTextColor(getColor(R.color.keepriva_danger)));
+        confirm.setOnShowListener(ignored -> {
+            Button delete = confirm.getButton(AlertDialog.BUTTON_POSITIVE);
+            delete.setTextColor(getColor(R.color.keepriva_danger));
+            delete.setContentDescription("Confirm permanent category deletion");
+
+            Button cancel = confirm.getButton(AlertDialog.BUTTON_NEGATIVE);
+            cancel.setContentDescription("Cancel permanent category deletion");
+        });
         ScreenSecurityManager.protect(confirm);
         confirm.show();
     }

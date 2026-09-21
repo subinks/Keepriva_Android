@@ -9,6 +9,7 @@ import static androidx.test.espresso.action.ViewActions.scrollTo;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.hasSibling;
+import static androidx.test.espresso.matcher.ViewMatchers.hasDescendant;
 import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;
 import static androidx.test.espresso.matcher.ViewMatchers.withHint;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
@@ -224,8 +225,16 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
                 .perform(replaceText("Login Child"), closeSoftKeyboard());
         onView(withText("Save")).perform(click());
 
-        // Login itself is index 0; the child should reuse the same semantic icon family.
-        onView(withIndex(withContentDescription("Category icon Login"), 1))
+        /*
+         * Verify the icon inside the Login Child row itself.
+         *
+         * Do not use withIndex(..., 1): Espresso can evaluate a stateful indexed
+         * matcher more than once while resolving/scrolling, which made this test
+         * flaky even though the child row was present.
+         */
+        onView(allOf(
+                withContentDescription("Open category Login Child"),
+                hasDescendant(withContentDescription("Category icon Login"))))
                 .perform(scrollTo())
                 .check(matches(isDisplayed()));
     }

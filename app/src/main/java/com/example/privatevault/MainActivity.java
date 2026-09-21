@@ -99,7 +99,10 @@ public class MainActivity extends Activity {
     private EditText searchBox;
     private Spinner categoryFilter;
     private ScrollView homeScroll;
-    private TextView homeEntriesHeading;
+    private LinearLayout homeCategoryTree;
+    private final Set<String> expandedHomeCategories = new HashSet<>();
+    private String selectedHomeCategory = "All";
+    private String pendingNewItemCategory = null;
     private List<VaultItem> allItems = new ArrayList<>();
     private List<CustomCategory> customCategories = new ArrayList<>();
     private byte[] pendingExportBytes;
@@ -1142,7 +1145,10 @@ public class MainActivity extends Activity {
         searchBox = null;
         categoryFilter = null;
         homeScroll = null;
-        homeEntriesHeading = null;
+        homeCategoryTree = null;
+        expandedHomeCategories.clear();
+        selectedHomeCategory = "All";
+        pendingNewItemCategory = null;
         clearPendingExportData();
         clearPendingTemplateData();
         clearPendingBackupData();
@@ -1262,6 +1268,23 @@ public class MainActivity extends Activity {
         categoryHeader.addView(categoryHeaderText, new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
 
+        Button quickAdd = button("+");
+        quickAdd.setContentDescription("Add entry or subcategory");
+        quickAdd.setTextSize(24);
+        quickAdd.setMinWidth(0);
+        quickAdd.setMinimumWidth(0);
+        quickAdd.setMinHeight(0);
+        quickAdd.setMinimumHeight(0);
+        quickAdd.setTextColor(getColor(android.R.color.white));
+        quickAdd.setBackground(UiStyle.rounded(
+                this, R.color.keepriva_primary, 22));
+        quickAdd.setOnClickListener(this::showCategoryQuickAddMenu);
+
+        LinearLayout.LayoutParams quickAddParams =
+                new LinearLayout.LayoutParams(dp(44), dp(44));
+        quickAddParams.rightMargin = dp(8);
+        categoryHeader.addView(quickAdd, quickAddParams);
+
         Button manageCategories = button("Manage");
         manageCategories.setContentDescription("Manage categories");
         UiStyle.styleCompactButton(manageCategories);
@@ -1270,68 +1293,14 @@ public class MainActivity extends Activity {
 
         categoryCard.addView(categoryHeader, matchWidth());
 
-        LinearLayout categoryTree = new LinearLayout(this);
-        categoryTree.setOrientation(LinearLayout.VERTICAL);
-
-        addHomeCategoryTreeRow(categoryTree, "All", "All categories", 0, countItemsForCategory("All"), true);
-
-        Set<String> rendered = new HashSet<>();
-
-        for (String builtIn : BUILT_IN_CATEGORIES) {
-            addHomeCategoryTreeRow(
-                    categoryTree,
-                    builtIn,
-                    builtIn,
-                    0,
-                    countItemsForCategory(builtIn),
-                    false
-            );
-            addHomeCustomCategoryChildren(categoryTree, builtIn, 1, rendered);
-        }
-
-        List<CustomCategory> roots = new ArrayList<>();
-        for (CustomCategory category : customCategories) {
-            if (safe(category.parentName).trim().isEmpty()) roots.add(category);
-        }
-        roots.sort((a, b) -> safe(a.name).compareToIgnoreCase(safe(b.name)));
-
-        for (CustomCategory root : roots) {
-            String key = safe(root.name).toLowerCase(Locale.ROOT);
-            if (!rendered.add(key)) continue;
-            addHomeCategoryTreeRow(
-                    categoryTree,
-                    root.name,
-                    root.name,
-                    0,
-                    countItemsForCategory(root.name),
-                    false
-            );
-            addHomeCustomCategoryChildren(categoryTree, root.name, 1, rendered);
-        }
-
-        categoryCard.addView(categoryTree, matchWidth());
+        homeCategoryTree = new LinearLayout(this);
+        homeCategoryTree.setOrientation(LinearLayout.VERTICAL);
+        categoryCard.addView(homeCategoryTree, matchWidth());
 
         LinearLayout.LayoutParams categoryParams = matchWidth();
         categoryParams.topMargin = dp(12);
         outer.addView(categoryCard, categoryParams);
 
-        // Primary vault content belongs directly below category navigation.
-        // Previously entries were rendered after the entire Vault tools section,
-        // which made category selection and search appear to do nothing.
-        Button addItem = primaryButton("+  Add item");
-        addItem.setContentDescription("Add item");
-        addItem.setOnClickListener(v -> showEditDialog(null));
-        LinearLayout.LayoutParams addParams = matchWidth();
-        addParams.topMargin = dp(12);
-        outer.addView(addItem, addParams);
-
-        homeEntriesHeading = UiStyle.sectionTitle(this, "Entries — All categories");
-        homeEntriesHeading.setPadding(dp(2), dp(18), 0, dp(6));
-        outer.addView(homeEntriesHeading, matchWidth());
-
-        listContainer = new LinearLayout(this);
-        listContainer.setOrientation(LinearLayout.VERTICAL);
-        outer.addView(listContainer, matchWidth());
 
         // Secondary management actions come after the user's actual vault content.
         LinearLayout toolsCard = UiStyle.verticalCard(this, 10);
@@ -1375,8 +1344,11 @@ public class MainActivity extends Activity {
         toolsParams.topMargin = dp(16);
         outer.addView(toolsCard, toolsParams);
 
-        // Hidden logical spinner retained only as state-holder for existing filtering
-        // and export code. Users navigate through the visible tree rows above.
+        // Hidden logical state holders retained for existing export/filter code.
+        listContainer = new LinearLayout(this);
+        listContainer.setVisibility(View.GONE);
+        outer.addView(listContainer, new LinearLayout.LayoutParams(1, 1));
+
         categoryFilter = new Spinner(this);
         categoryFilter.setAdapter(new ArrayAdapter<>(
                 this,
@@ -1387,9 +1359,7 @@ public class MainActivity extends Activity {
 
         searchBox.addTextChangedListener(new SimpleTextWatcher(() -> {
             applyFilter();
-            if (!searchBox.getText().toString().trim().isEmpty()) {
-                scrollHomeToEntries();
-            }
+            rebuildHomeCategoryTree();
         }));
         categoryFilter.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             public void onItemSelected(AdapterView<?> p, View v, int pos, long id) { applyFilter(); }
@@ -1399,6 +1369,7 @@ public class MainActivity extends Activity {
         homeScroll = wrap(outer);
         setContentView(homeScroll);
         applyFilter();
+        rebuildHomeCategoryTree();
     }
 
     private View homeToolRow(
@@ -1461,45 +1432,103 @@ public class MainActivity extends Activity {
 
         return row;
     }
-    private void addHomeCustomCategoryChildren(
-            LinearLayout container,
-            String parentName,
-            int depth,
-            Set<String> rendered) {
+    private void showCategoryQuickAddMenu(View anchor) {
+        android.widget.PopupMenu menu = new android.widget.PopupMenu(this, anchor);
+        menu.getMenu().add("Entry");
+        menu.getMenu().add("Sub Category");
+        menu.setOnMenuItemClickListener(item -> {
+            String title = String.valueOf(item.getTitle());
+            if ("Entry".equals(title)) {
+                String initial = "All".equals(selectedHomeCategory)
+                        ? "Login"
+                        : selectedHomeCategory;
+                pendingNewItemCategory = initial;
+                showEditDialog(null);
+                return true;
+            }
+            if ("Sub Category".equals(title)) {
+                String parent = "All".equals(selectedHomeCategory)
+                        ? ""
+                        : selectedHomeCategory;
+                showCustomCategoryEditor(null, parent);
+                return true;
+            }
+            return false;
+        });
+        menu.show();
+    }
 
-        List<CustomCategory> children = new ArrayList<>();
-        for (CustomCategory category : customCategories) {
-            if (safe(category.parentName).equalsIgnoreCase(safe(parentName))) {
-                children.add(category);
+    private void rebuildHomeCategoryTree() {
+        if (homeCategoryTree == null) return;
+
+        homeCategoryTree.removeAllViews();
+        String query = searchBox == null
+                ? ""
+                : searchBox.getText().toString().trim().toLowerCase(Locale.ROOT);
+
+        if (query.isEmpty()) {
+            addExpandableHomeCategory(
+                    homeCategoryTree, "All", "All categories", 0, true, query);
+        }
+
+        for (String builtIn : BUILT_IN_CATEGORIES) {
+            if (query.isEmpty() || categoryBranchMatches(builtIn, query)) {
+                addExpandableHomeCategory(
+                        homeCategoryTree, builtIn, builtIn, 0, false, query);
             }
         }
 
-        children.sort((a, b) -> safe(a.name).compareToIgnoreCase(safe(b.name)));
+        List<CustomCategory> roots = new ArrayList<>();
+        for (CustomCategory category : customCategories) {
+            if (safe(category.parentName).trim().isEmpty()) roots.add(category);
+        }
+        roots.sort((a, b) -> safe(a.name).compareToIgnoreCase(safe(b.name)));
 
-        for (CustomCategory child : children) {
-            String key = safe(child.name).toLowerCase(Locale.ROOT);
-            if (!rendered.add(key)) continue;
+        for (CustomCategory root : roots) {
+            if (query.isEmpty() || categoryBranchMatches(root.name, query)) {
+                addExpandableHomeCategory(
+                        homeCategoryTree, root.name, root.name, 0, false, query);
+            }
+        }
 
-            addHomeCategoryTreeRow(
-                    container,
-                    child.name,
-                    child.name,
-                    depth,
-                    countItemsForCategory(child.name),
-                    false
-            );
-
-            addHomeCustomCategoryChildren(container, child.name, depth + 1, rendered);
+        if (!query.isEmpty() && homeCategoryTree.getChildCount() == 0) {
+            TextView empty = subtitle("No matching categories, subcategories or entries.");
+            empty.setPadding(dp(8), dp(16), dp(8), dp(16));
+            homeCategoryTree.addView(empty);
         }
     }
 
-    private void addHomeCategoryTreeRow(
+    private boolean categoryBranchMatches(String categoryName, String query) {
+        if (query.isEmpty()) return true;
+        if (safe(categoryName).toLowerCase(Locale.ROOT).contains(query)) return true;
+
+        for (VaultItem item : allItems) {
+            if (safe(item.category).equalsIgnoreCase(categoryName)
+                    && searchText(item).contains(query)) {
+                return true;
+            }
+        }
+
+        for (CustomCategory child : customCategories) {
+            if (safe(child.parentName).equalsIgnoreCase(categoryName)
+                    && categoryBranchMatches(child.name, query)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void addExpandableHomeCategory(
             LinearLayout container,
             String categoryName,
             String label,
             int depth,
-            int itemCount,
-            boolean allCategories) {
+            boolean allCategories,
+            String query) {
+
+        String key = safe(categoryName).toLowerCase(Locale.ROOT);
+        boolean searching = !query.isEmpty();
+        boolean expanded = searching || expandedHomeCategories.contains(key);
 
         LinearLayout indent = new LinearLayout(this);
         indent.setOrientation(LinearLayout.VERTICAL);
@@ -1513,7 +1542,7 @@ public class MainActivity extends Activity {
                 this, R.color.keepriva_surface, R.color.keepriva_outline, 12));
         row.setClickable(true);
         row.setFocusable(true);
-        row.setContentDescription("Open category " + label);
+        row.setContentDescription((expanded ? "Close category " : "Open category ") + label);
 
         ImageView icon = new ImageView(this);
         icon.setImageResource(categoryIconFor(categoryName, allCategories));
@@ -1536,9 +1565,10 @@ public class MainActivity extends Activity {
         nameView.setTextColor(getColor(R.color.keepriva_text_primary));
         text.addView(nameView);
 
+        int count = allCategories ? allItems.size() : countItemsForCategory(categoryName);
         TextView countView = new TextView(this);
         countView.setText((depth == 0 ? "Category" : "Subcategory")
-                + " • " + itemCount + (itemCount == 1 ? " entry" : " entries"));
+                + " • " + count + (count == 1 ? " entry" : " entries"));
         countView.setTextSize(13);
         countView.setTextColor(getColor(R.color.keepriva_text_secondary));
         text.addView(countView);
@@ -1547,38 +1577,115 @@ public class MainActivity extends Activity {
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
 
         TextView arrow = new TextView(this);
-        arrow.setText("›");
-        arrow.setTextSize(28);
+        arrow.setText(expanded ? "⌄" : "›");
+        arrow.setTextSize(26);
         arrow.setTextColor(getColor(R.color.keepriva_text_secondary));
         arrow.setGravity(Gravity.CENTER);
         row.addView(arrow, new LinearLayout.LayoutParams(dp(32), dp(40)));
 
         row.setOnClickListener(v -> {
-            String selected = allCategories ? "All" : categoryName;
-            selectHomeCategoryByName(selected);
+            selectedHomeCategory = allCategories ? "All" : categoryName;
+            selectHomeCategoryByName(selectedHomeCategory);
 
-            if (homeEntriesHeading != null) {
-                homeEntriesHeading.setText(allCategories
-                        ? "Entries — All categories"
-                        : "Entries — " + label);
+            if (expandedHomeCategories.contains(key)) {
+                expandedHomeCategories.remove(key);
+            } else {
+                expandedHomeCategories.add(key);
             }
 
-            applyFilter();
-            scrollHomeToEntries();
+            rebuildHomeCategoryTree();
         });
 
         indent.addView(row, matchWidth());
-
         LinearLayout.LayoutParams lp = matchWidth();
         lp.setMargins(0, dp(4), 0, dp(4));
         container.addView(indent, lp);
+
+        if (!expanded) return;
+
+        if (allCategories) {
+            for (VaultItem item : allItems) {
+                if (query.isEmpty() || searchText(item).contains(query)) {
+                    addHomeEntryTreeRow(container, item, depth + 1);
+                }
+            }
+            return;
+        }
+
+        List<VaultItem> directItems = new ArrayList<>();
+        for (VaultItem item : allItems) {
+            if (safe(item.category).equalsIgnoreCase(categoryName)
+                    && (query.isEmpty() || searchText(item).contains(query))) {
+                directItems.add(item);
+            }
+        }
+        directItems.sort((a, b) -> safe(a.title).compareToIgnoreCase(safe(b.title)));
+        for (VaultItem item : directItems) {
+            addHomeEntryTreeRow(container, item, depth + 1);
+        }
+
+        List<CustomCategory> children = new ArrayList<>();
+        for (CustomCategory child : customCategories) {
+            if (safe(child.parentName).equalsIgnoreCase(categoryName)) {
+                children.add(child);
+            }
+        }
+        children.sort((a, b) -> safe(a.name).compareToIgnoreCase(safe(b.name)));
+
+        for (CustomCategory child : children) {
+            if (query.isEmpty() || categoryBranchMatches(child.name, query)) {
+                addExpandableHomeCategory(
+                        container,
+                        child.name,
+                        child.name,
+                        depth + 1,
+                        false,
+                        query);
+            }
+        }
+
+        if (directItems.isEmpty() && children.isEmpty() && query.isEmpty()) {
+            TextView empty = subtitle("No entries or subcategories.");
+            empty.setPadding(dp((depth + 1) * 20 + 8), dp(6), dp(8), dp(10));
+            container.addView(empty);
+        }
     }
 
-    private void scrollHomeToEntries() {
-        if (homeScroll == null || homeEntriesHeading == null) return;
+    private void addHomeEntryTreeRow(
+            LinearLayout container,
+            VaultItem item,
+            int depth) {
 
-        homeEntriesHeading.post(() ->
-                homeScroll.smoothScrollTo(0, homeEntriesHeading.getTop()));
+        LinearLayout indent = new LinearLayout(this);
+        indent.setOrientation(LinearLayout.VERTICAL);
+        indent.setPadding(dp(Math.min(depth, HARD_MAX_CATEGORY_DEPTH + 1) * 20), 0, 0, 0);
+
+        LinearLayout card = baseVertical(4);
+        card.setPadding(dp(12), dp(10), dp(12), dp(10));
+        UiStyle.styleCard(card);
+        card.setContentDescription("Open entry " + safe(item.title));
+
+        TextView title = new TextView(this);
+        title.setText(safe(item.title).isEmpty() ? "Untitled" : item.title);
+        title.setTextSize(15);
+        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        title.setTextColor(getColor(R.color.keepriva_text_primary));
+        card.addView(title);
+
+        TextView secondary = new TextView(this);
+        secondary.setText(safe(item.username).isEmpty()
+                ? categoryPath(item.category)
+                : safe(item.username));
+        secondary.setTextSize(13);
+        secondary.setTextColor(getColor(R.color.keepriva_text_secondary));
+        card.addView(secondary);
+
+        card.setOnClickListener(v -> showDetails(item));
+
+        indent.addView(card, matchWidth());
+        LinearLayout.LayoutParams lp = matchWidth();
+        lp.setMargins(0, dp(3), 0, dp(3));
+        container.addView(indent, lp);
     }
     private int categoryIconFor(String categoryName, boolean allCategories) {
         if (allCategories) return R.drawable.ic_keepriva_folder;
@@ -1822,7 +1929,13 @@ public class MainActivity extends Activity {
         CategoryOption[] editableCats = getEditableCategories();
         category.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, editableCats));
         int idx = 0;
-        for (int i = 0; i < editableCats.length; i++) if (editableCats[i].name.equals(item.category)) idx = i;
+        String requestedCategory = existing == null && pendingNewItemCategory != null
+                ? pendingNewItemCategory
+                : item.category;
+        for (int i = 0; i < editableCats.length; i++) {
+            if (editableCats[i].name.equals(requestedCategory)) idx = i;
+        }
+        pendingNewItemCategory = null;
         category.setSelection(idx);
 
         TextView formHelp = subtitle("");
@@ -1973,6 +2086,12 @@ public class MainActivity extends Activity {
                 database.save(item, sessionKey);
                 d.dismiss();
                 loadItems();
+
+                selectedHomeCategory = item.category;
+                expandedHomeCategories.add(
+                        safe(item.category).toLowerCase(Locale.ROOT));
+                selectHomeCategoryByName(item.category);
+                rebuildHomeCategoryTree();
             } catch (Exception e) {
                 toast("Could not save encrypted item.");
             }
@@ -2325,6 +2444,10 @@ public class MainActivity extends Activity {
         body.addView(indent, lp);
     }
     private void showCustomCategoryEditor(CustomCategory existing) {
+        showCustomCategoryEditor(existing, null);
+    }
+
+    private void showCustomCategoryEditor(CustomCategory existing, String initialParentName) {
         CustomCategory model = existing == null ? new CustomCategory() : existing;
         LinearLayout form = baseVertical(6);
         EditText name = field("Category name", model.name);
@@ -2333,8 +2456,11 @@ public class MainActivity extends Activity {
         CategoryOption[] parentOptions = parentOptionsFor(existing);
         parent.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, parentOptions));
         int parentIndex = 0;
+        String requestedParent = existing == null && initialParentName != null
+                ? initialParentName
+                : safe(model.parentName);
         for (int i = 0; i < parentOptions.length; i++) {
-            if (parentOptions[i].name.equals(safe(model.parentName))) { parentIndex = i; break; }
+            if (parentOptions[i].name.equals(requestedParent)) { parentIndex = i; break; }
         }
         parent.setSelection(parentIndex);
 

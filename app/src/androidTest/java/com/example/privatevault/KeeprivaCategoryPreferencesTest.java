@@ -191,6 +191,33 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
                 .check(matches(isDisplayed()));
     }
     @Test
+    public void quickAddMenu_showsEntryAndSubCategoryOptions() {
+        createTestVault();
+
+        onView(withContentDescription("Add entry or subcategory"))
+                .perform(scrollTo(), click());
+
+        onView(withText("Entry")).check(matches(isDisplayed()));
+        onView(withText("Sub Category")).check(matches(isDisplayed()));
+    }
+
+    @Test
+    public void searchForSubCategory_showsTreePath() {
+        createTestVault();
+        createFolderCategory("Search Child");
+
+        onView(withHint("Search title, username, phone, website or notes"))
+                .perform(scrollTo(), replaceText("Search Child"), closeSoftKeyboard());
+
+        onView(withText("Search Child"))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
+
+        onView(withContentDescription("Close category Search Child"))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
+    }
+    @Test
     public void customCategoryAppearsInHomeFilter() {
         createTestVault();
         createFolderCategory("Filter Category");

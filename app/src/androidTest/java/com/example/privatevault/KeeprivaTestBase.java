@@ -183,7 +183,10 @@ public abstract class KeeprivaTestBase {
          * the API-35 CI emulator. Invoke the real registered listener directly,
          * then explicitly switch Espresso to the dialog root.
          */
-        onView(withContentDescription("Add item")).perform(scrollTo(), performClickDirectly());
+        onView(withContentDescription("Add entry or subcategory"))
+                .perform(scrollTo(), performClickDirectly());
+
+        onView(withText("Entry")).perform(click());
 
         // AlertDialog owns window focus now. Never let Espresso choose the
         // underlying Activity root while the editor dialog is open.
@@ -312,17 +315,10 @@ public abstract class KeeprivaTestBase {
         onView(withContentDescription("Open category " + label))
                 .perform(scrollTo(), performClickDirectly());
 
-        final String expectedHeading =
-                "All categories".equals(label)
-                        ? "Entries — All categories"
-                        : "Entries — " + label;
-
-        waitForUiState("selected category " + label, view ->
-                view instanceof android.widget.TextView
-                        && expectedHeading.contentEquals(
-                                ((android.widget.TextView) view).getText()));
+        waitForUiState("expanded category " + label, view ->
+                ("Close category " + label).contentEquals(
+                        view.getContentDescription()));
     }
-
     /**
      * Invokes a view's registered OnClickListener directly on the UI thread.
      *

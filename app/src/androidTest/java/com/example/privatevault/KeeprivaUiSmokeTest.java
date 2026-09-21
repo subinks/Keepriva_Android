@@ -169,30 +169,9 @@ public class KeeprivaUiSmokeTest {
     public void addItem_requiresTitle() {
         createTestVault();
 
-        onView(withContentDescription("Add item")).perform(scrollTo(), new androidx.test.espresso.ViewAction() {
-            @Override
-            public org.hamcrest.Matcher<android.view.View> getConstraints() {
-                return isDisplayed();
-            }
-
-            @Override
-            public String getDescription() {
-                return "invoke Add item performClick directly";
-            }
-
-            @Override
-            public void perform(androidx.test.espresso.UiController uiController,
-                                android.view.View view) {
-                if (!view.isEnabled() || !view.isClickable()) {
-                    throw new AssertionError("Add item must be enabled and clickable");
-                }
-                if (!view.performClick()) {
-                    throw new AssertionError("Add item performClick returned false");
-                }
-                uiController.loopMainThreadUntilIdle();
-            }
-        });
-
+        onView(withContentDescription("Add entry or subcategory"))
+                .perform(scrollTo(), click());
+        onView(withText("Entry")).perform(click());
         onView(withText("Add vault item")).inRoot(isDialog()).check(matches(isDisplayed()));
         onView(withContentDescription("Save vault item")).inRoot(isDialog()).check(matches(isDisplayed()));
         onView(withContentDescription("Cancel vault item")).inRoot(isDialog()).check(matches(isDisplayed()));

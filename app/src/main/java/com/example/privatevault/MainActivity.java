@@ -2392,6 +2392,7 @@ public class MainActivity extends Activity {
                 .setView(root)
                 .create();
         holder[0] = dialog;
+        root.setTag(dialog);
         close.setOnClickListener(v -> dialog.dismiss());
         add.setOnClickListener(v -> {
             dialog.dismiss();
@@ -2448,11 +2449,10 @@ public class MainActivity extends Activity {
         ImageButton delete = smallIconButton(
                 R.drawable.ic_keepriva_delete, "Delete category " + name, true);
         delete.setTooltipText("Delete " + name);
-        delete.setOnClickListener(v -> {
-            AlertDialog parent = findShowingDialogForView(v);
-            if (parent != null) parent.dismiss();
-            deleteCategory(name, null);
-        });
+        delete.setOnClickListener(v ->
+                dismissDialogThen(
+                        findShowingDialogForView(v),
+                        () -> deleteCategory(name, null)));
         row.addView(delete, new LinearLayout.LayoutParams(dp(36), dp(36)));
 
         LinearLayout.LayoutParams rowParams = matchWidth();
@@ -2487,11 +2487,10 @@ public class MainActivity extends Activity {
         ImageButton delete = smallIconButton(
                 R.drawable.ic_keepriva_delete, "Delete category " + category.name, true);
         delete.setTooltipText("Delete " + category.name);
-        delete.setOnClickListener(v -> {
-            AlertDialog parent = findShowingDialogForView(v);
-            if (parent != null) parent.dismiss();
-            deleteCategory(category.name, category);
-        });
+        delete.setOnClickListener(v ->
+                dismissDialogThen(
+                        findShowingDialogForView(v),
+                        () -> deleteCategory(category.name, category)));
         LinearLayout.LayoutParams deleteParams = new LinearLayout.LayoutParams(dp(36), dp(36));
         deleteParams.leftMargin = dp(3);
         row.addView(delete, deleteParams);
@@ -2644,14 +2643,18 @@ public class MainActivity extends Activity {
             AlertDialog dialog = new AlertDialog.Builder(this)
                     .setTitle("Delete category?")
                     .setMessage("Delete \"" + categoryPath(categoryName) + "\"?")
-                    .setPositiveButton("Delete category", (d, w) ->
-                            performCategorySubtreeDelete(categoryName, customCategory, subtreeNames))
+                    .setPositiveButton("Delete category", null)
                     .setNegativeButton("Cancel", null)
                     .create();
             dialog.setOnShowListener(ignored -> {
                 Button confirm = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
                 confirm.setContentDescription("Confirm delete category " + categoryName);
                 confirm.setTextColor(getColor(R.color.keepriva_danger));
+                confirm.setOnClickListener(v ->
+                        dismissDialogThen(
+                                dialog,
+                                () -> performCategorySubtreeDelete(
+                                        categoryName, customCategory, subtreeNames)));
             });
             ScreenSecurityManager.protect(dialog);
             dialog.show();
@@ -2687,13 +2690,14 @@ public class MainActivity extends Activity {
             destructive.setTextColor(getColor(R.color.keepriva_danger));
             destructive.setContentDescription("Delete category and all contents");
             destructive.setOnClickListener(v ->
-                    confirmForceDeleteCategory(
-                            categoryName,
-                            customCategory,
-                            subtreeNames,
-                            totalItemCount,
-                            descendantCount,
-                            dialog));
+                    dismissDialogThen(
+                            dialog,
+                            () -> confirmForceDeleteCategory(
+                                    categoryName,
+                                    customCategory,
+                                    subtreeNames,
+                                    totalItemCount,
+                                    descendantCount)));
         });
         ScreenSecurityManager.protect(dialog);
         dialog.show();
@@ -2726,8 +2730,7 @@ public class MainActivity extends Activity {
                                             CustomCategory customCategory,
                                             Set<String> subtreeNames,
                                             int itemCount,
-                                            int descendantCount,
-                                            AlertDialog parentDialog) {
+                                            int descendantCount) {
         AlertDialog confirm = new AlertDialog.Builder(this)
                 .setTitle("Permanently delete subtree?")
                 .setMessage("This permanently deletes " + itemCount
@@ -2735,16 +2738,18 @@ public class MainActivity extends Activity {
                         + descendantCount
                         + (descendantCount == 1 ? " subcategory." : " subcategories.")
                         + " This action cannot be undone.")
-                .setPositiveButton("Delete permanently", (d, w) -> {
-                    parentDialog.dismiss();
-                    performCategorySubtreeDelete(categoryName, customCategory, subtreeNames);
-                })
-                .setNegativeButton("Cancel", (d, w) -> parentDialog.dismiss())
+                .setPositiveButton("Delete permanently", null)
+                .setNegativeButton("Cancel", null)
                 .create();
         confirm.setOnShowListener(ignored -> {
             Button delete = confirm.getButton(AlertDialog.BUTTON_POSITIVE);
             delete.setTextColor(getColor(R.color.keepriva_danger));
             delete.setContentDescription("Confirm permanent category deletion");
+            delete.setOnClickListener(v ->
+                    dismissDialogThen(
+                            confirm,
+                            () -> performCategorySubtreeDelete(
+                                    categoryName, customCategory, subtreeNames)));
 
             Button cancel = confirm.getButton(AlertDialog.BUTTON_NEGATIVE);
             cancel.setContentDescription("Cancel permanent category deletion");
@@ -3567,6 +3572,16 @@ public class MainActivity extends Activity {
 
     private LinearLayout.LayoutParams matchWidth() {
         return new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+    }
+
+    private void dismissDialogThen(AlertDialog dialog, Runnable continuation) {
+        if (continuation == null) return;
+        if (dialog == null || !dialog.isShowing()) {
+            continuation.run();
+            return;
+        }
+        dialog.setOnDismissListener(ignored -> continuation.run());
+        dialog.dismiss();
     }
 
     private AlertDialog findShowingDialogForView(View view) {

@@ -38,9 +38,10 @@ public class KeeprivaCategoryDeletionTest extends KeeprivaTestBase {
         createTestVault();
         openCategoryManager();
         onView(withContentDescription("Delete category Contact"))
-                .inRoot(isDialog()).perform(scrollTo(), click());
+                .inRoot(isDialog()).perform(scrollTo(), performClickDirectly());
         onView(withContentDescription("Confirm delete category Contact"))
                 .inRoot(isDialog()).perform(click());
+        waitForHomeScreen();
 
         onView(withContentDescription("Open category Contact")).check(doesNotExist());
 
@@ -56,12 +57,11 @@ public class KeeprivaCategoryDeletionTest extends KeeprivaTestBase {
 
         openCategoryManager();
         onView(withContentDescription("Delete category Keep Cascade"))
-                .inRoot(isDialog()).perform(scrollTo(), click());
+                .inRoot(isDialog()).perform(scrollTo(), performClickDirectly());
         onView(withContentDescription("Delete category and all contents"))
                 .inRoot(isDialog()).perform(click());
         onView(withContentDescription("Cancel permanent category deletion"))
                 .inRoot(isDialog()).perform(click());
-        waitForActivityWindowFocus();
         waitForHomeScreen();
 
         openCategoryManager();
@@ -78,12 +78,11 @@ public class KeeprivaCategoryDeletionTest extends KeeprivaTestBase {
 
         openCategoryManager();
         onView(withContentDescription("Delete category Cascade Root"))
-                .inRoot(isDialog()).perform(scrollTo(), click());
+                .inRoot(isDialog()).perform(scrollTo(), performClickDirectly());
         onView(withContentDescription("Delete category and all contents"))
                 .inRoot(isDialog()).perform(click());
         onView(withContentDescription("Confirm permanent category deletion"))
                 .inRoot(isDialog()).perform(click());
-        waitForActivityWindowFocus();
         waitForHomeScreen();
 
         onView(withContentDescription("Open category Cascade Root")).check(doesNotExist());
@@ -99,12 +98,11 @@ public class KeeprivaCategoryDeletionTest extends KeeprivaTestBase {
 
         openCategoryManager();
         onView(withContentDescription("Delete category Login"))
-                .inRoot(isDialog()).perform(scrollTo(), click());
+                .inRoot(isDialog()).perform(scrollTo(), performClickDirectly());
         onView(withContentDescription("Delete category and all contents"))
                 .inRoot(isDialog()).perform(click());
         onView(withContentDescription("Confirm permanent category deletion"))
                 .inRoot(isDialog()).perform(click());
-        waitForActivityWindowFocus();
         waitForHomeScreen();
 
         onView(withContentDescription("Open category Login")).check(doesNotExist());

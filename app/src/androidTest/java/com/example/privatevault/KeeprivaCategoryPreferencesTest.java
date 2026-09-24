@@ -131,8 +131,10 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
         onView(withText("Preferences")).perform(scrollTo(), click());
 
         onView(withText("Enable editing category nesting depth"))
+                .inRoot(isDialog())
                 .check(matches(isDisplayed()));
         onView(withHint("Maximum category depth (1-5)"))
+                .inRoot(isDialog())
                 .check(matches(isDisplayed()));
     }
 
@@ -141,12 +143,17 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
         createTestVault();
         onView(withText("Preferences")).perform(scrollTo(), click());
 
-        onView(withText("Enable editing category nesting depth")).perform(click());
+        onView(withText("Enable editing category nesting depth"))
+                .inRoot(isDialog())
+                .perform(click());
         onView(withHint("Maximum category depth (1-5)"))
+                .inRoot(isDialog())
                 .perform(replaceText("0"), closeSoftKeyboard());
-        onView(withText("Save")).perform(click());
+        onView(withText("Save")).inRoot(isDialog()).perform(click());
 
-        onView(withText("Save")).check(matches(isDisplayed()));
+        onView(withText("Save"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
     }
 
     @Test
@@ -154,12 +161,17 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
         createTestVault();
         onView(withText("Preferences")).perform(scrollTo(), click());
 
-        onView(withText("Enable editing category nesting depth")).perform(click());
+        onView(withText("Enable editing category nesting depth"))
+                .inRoot(isDialog())
+                .perform(click());
         onView(withHint("Maximum category depth (1-5)"))
+                .inRoot(isDialog())
                 .perform(replaceText("6"), closeSoftKeyboard());
-        onView(withText("Save")).perform(click());
+        onView(withText("Save")).inRoot(isDialog()).perform(click());
 
-        onView(withText("Save")).check(matches(isDisplayed()));
+        onView(withText("Save"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
     }
 
     @Test
@@ -167,10 +179,13 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
         createTestVault();
         onView(withText("Preferences")).perform(scrollTo(), click());
 
-        onView(withText("Enable editing category nesting depth")).perform(click());
+        onView(withText("Enable editing category nesting depth"))
+                .inRoot(isDialog())
+                .perform(click());
         onView(withHint("Maximum category depth (1-5)"))
+                .inRoot(isDialog())
                 .perform(replaceText("5"), closeSoftKeyboard());
-        onView(withText("Save")).perform(click());
+        onView(withText("Save")).inRoot(isDialog()).perform(click());
 
         onView(withHint("Search title, username, phone, website or notes"))
                 .perform(scrollTo())

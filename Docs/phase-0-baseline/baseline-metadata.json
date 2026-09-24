@@ -1,0 +1,64 @@
+{
+    "capturedOnUtc":  "2026-09-24T10.51.29Z",
+    "repository":  "subinks/Keepriva_Android",
+    "workingBranch":  "ui_eh_ph0",
+    "headAtCapture":  "bb70c9ade6975386bfb111bfe97775adfc0d86cf",
+    "greenCommit":  "6851c467896abc3d8d375cfb9f237379adce5708",
+    "baselineTag":  "ui-enhancement-green-2026-09-24",
+    "workflowRunId":  35973848830,
+    "workflowRunUrl":  "https://github.com/subinks/Keepriva_Android/actions/runs/35973848830",
+    "workflowConclusion":  "success",
+    "workflowJobDurationSeconds":  1097,
+    "workflowWallClockSeconds":  1102,
+    "application":  {
+                        "versionCode":  16,
+                        "versionName":  "2.1.0-alpha1",
+                        "databaseVersion":  3,
+                        "backupFormatVersion":  1,
+                        "internetPermissionPresent":  false
+                    },
+    "instrumentation":  {
+                            "classCount":  9,
+                            "totalMethods":  89,
+                            "blockingMethods":  88,
+                            "biometricDiagnosticMethods":  1,
+                            "classes":  [
+                                            {
+                                                "class":  "KeeprivaAuthHomeTest",
+                                                "methods":  11
+                                            },
+                                            {
+                                                "class":  "KeeprivaBiometricCiTest",
+                                                "methods":  1
+                                            },
+                                            {
+                                                "class":  "KeeprivaCategoryDeletionTest",
+                                                "methods":  5
+                                            },
+                                            {
+                                                "class":  "KeeprivaCategoryPreferencesTest",
+                                                "methods":  19
+                                            },
+                                            {
+                                                "class":  "KeeprivaDataTransferTest",
+                                                "methods":  12
+                                            },
+                                            {
+                                                "class":  "KeeprivaItemCrudTest",
+                                                "methods":  14
+                                            },
+                                            {
+                                                "class":  "KeeprivaLifecycleRobustnessTest",
+                                                "methods":  5
+                                            },
+                                            {
+                                                "class":  "KeeprivaSecuritySettingsTest",
+                                                "methods":  12
+                                            },
+                                            {
+                                                "class":  "KeeprivaUiSmokeTest",
+                                                "methods":  10
+                                            }
+                                        ]
+                        }
+}

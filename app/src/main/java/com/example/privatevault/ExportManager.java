@@ -5,6 +5,9 @@ import android.graphics.Paint;
 import android.graphics.Typeface;
 import android.graphics.pdf.PdfDocument;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 import java.io.ByteArrayOutputStream;
 import java.text.DateFormat;
 import java.util.ArrayList;
@@ -13,6 +16,8 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -38,6 +43,140 @@ public final class ExportManager {
         }
     }
 
+    /**
+     * Plaintext structured export using the same JSON contract consumed by ImportManager.
+     * It is re-importable, but it is NOT an encrypted backup; .pvault remains the secure
+     * backup/recovery format.
+     */
+    public static String toImportCompatibleJson(
+            List<VaultItem> items,
+            Options options,
+            List<CustomCategory> customCategories) throws Exception {
+
+        JSONObject root = new JSONObject();
+        root.put("templateVersion", ImportManager.TEMPLATE_VERSION);
+        root.put("description",
+                "Keepriva structured JSON export. Import it using Import data.");
+        root.put("securityNotice",
+                "This JSON export is NOT encrypted. Use .pvault for encrypted backup/restore.");
+        root.put("exportPolicy", policyText(options));
+
+        Map<String, CustomCategory> metadataByName = new LinkedHashMap<>();
+        if (customCategories != null) {
+            for (CustomCategory c : customCategories) metadataByName.put(safe(c.name), c);
+        }
+
+        Map<String, List<VaultItem>> grouped = new LinkedHashMap<>();
+        for (VaultItem item : items) {
+            String category = safe(item.category).trim();
+            if (category.isEmpty()) category = "Other";
+            grouped.computeIfAbsent(category, k -> new ArrayList<>()).add(item);
+        }
+
+        JSONArray categories = new JSONArray();
+
+        for (Map.Entry<String, List<VaultItem>> group : grouped.entrySet()) {
+            String categoryName = group.getKey();
+            List<VaultItem> categoryItems = group.getValue();
+
+            JSONObject category = new JSONObject();
+            category.put("name", categoryName);
+
+            CustomCategory metadata = metadataByName.get(categoryName);
+            category.put("parentCategory",
+                    metadata == null ? "" : safe(metadata.parentName));
+
+            JSONArray fields = new JSONArray();
+            fields.put(jsonField("title", "Title", "text", false, false, false, "title"));
+            fields.put(jsonField("username", "Username / Email", "text", false, false, false, "username"));
+
+            if (options != null && options.includePasswords) {
+                fields.put(jsonField("password", "Password", "password", true, false, false, "password"));
+            }
+
+            fields.put(jsonField("phone1", "Phone 1", "phone", false, false, false, "phone1"));
+            fields.put(jsonField("phone2", "Phone 2", "phone", false, false, false, "phone2"));
+            fields.put(jsonField("phone3", "Phone 3", "phone", false, false, false, "phone3"));
+            fields.put(jsonField("website", "Website / App", "text", false, false, false, "website"));
+            fields.put(jsonField("websiteUrl", "Website URL", "url", false, false, false, "websiteUrl"));
+            fields.put(jsonField("notes", "Notes", "textarea", false, false, true, "notes"));
+
+            LinkedHashSet<String> customLabels = new LinkedHashSet<>();
+            if (metadata != null && metadata.fields != null) {
+                customLabels.addAll(metadata.fields);
+            }
+            for (VaultItem item : categoryItems) {
+                if (item.customFields != null) customLabels.addAll(item.customFields.keySet());
+            }
+
+            Map<String, String> customKeys = new LinkedHashMap<>();
+            int customIndex = 1;
+            for (String label : customLabels) {
+                boolean sensitive = options != null && options.isSensitiveCustom(categoryName, label);
+                if (sensitive && !options.includeSensitiveCustomFields) continue;
+
+                String key = "custom_" + customIndex++;
+                customKeys.put(label, key);
+                fields.put(jsonField(key, label, "text", sensitive, false, false, "custom"));
+            }
+
+            category.put("fields", fields);
+
+            JSONArray entries = new JSONArray();
+            for (VaultItem item : categoryItems) {
+                JSONObject values = new JSONObject();
+
+                putIfNotBlank(values, "title", item.title);
+                putIfNotBlank(values, "username", item.username);
+                if (options != null && options.includePasswords) {
+                    putIfNotBlank(values, "password", item.password);
+                }
+                putIfNotBlank(values, "phone1", item.phone1);
+                putIfNotBlank(values, "phone2", item.phone2);
+                putIfNotBlank(values, "phone3", item.phone3);
+                putIfNotBlank(values, "website", item.website);
+                putIfNotBlank(values, "websiteUrl", item.websiteUrl);
+                putIfNotBlank(values, "notes", item.notes);
+
+                if (item.customFields != null) {
+                    for (Map.Entry<String, String> custom : item.customFields.entrySet()) {
+                        String key = customKeys.get(custom.getKey());
+                        if (key != null) putIfNotBlank(values, key, custom.getValue());
+                    }
+                }
+
+                JSONObject entry = new JSONObject();
+                entry.put("values", values);
+                entries.put(entry);
+            }
+
+            category.put("entries", entries);
+            categories.put(category);
+        }
+
+        root.put("categories", categories);
+        return root.toString(2);
+    }
+
+    private static JSONObject jsonField(
+            String key, String label, String type, boolean sensitive,
+            boolean multipleValues, boolean multiline, String target) throws Exception {
+
+        JSONObject f = new JSONObject();
+        f.put("key", key);
+        f.put("label", label);
+        f.put("type", type);
+        f.put("sensitive", sensitive);
+        f.put("multipleValues", multipleValues);
+        f.put("multiline", multiline);
+        f.put("target", target);
+        return f;
+    }
+
+    private static void putIfNotBlank(JSONObject target, String key, String value)
+            throws Exception {
+        if (!safe(value).trim().isEmpty()) target.put(key, value);
+    }
     public static String toText(List<VaultItem> items, Options options) {
         StringBuilder out = new StringBuilder();
         out.append("KEEPRIVA EXPORT\n");

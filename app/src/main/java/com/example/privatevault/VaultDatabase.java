@@ -280,6 +280,30 @@ public class VaultDatabase extends SQLiteOpenHelper {
     }
 
     /**
+     * Deletes every item and custom-category row in a resolved category subtree.
+     * The caller resolves names/ids from already decrypted in-memory models; this
+     * method guarantees all-or-nothing persistence with one SQLite transaction.
+     */
+    public void deleteCategorySubtree(List<VaultItem> items,
+                                      java.util.Set<String> categoryNames,
+                                      java.util.Set<Long> customCategoryIds) {
+        SQLiteDatabase db = getWritableDatabase();
+        db.beginTransaction();
+        try {
+            for (VaultItem item : items) {
+                if (categoryNames.contains(safe(item.category).toLowerCase(java.util.Locale.ROOT))) {
+                    db.delete("vault_items", "id=?", new String[]{String.valueOf(item.id)});
+                }
+            }
+            for (Long id : customCategoryIds) {
+                db.delete("custom_categories", "id=?", new String[]{String.valueOf(id)});
+            }
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+        }
+    }
+    /**
      * Renames or reparents a custom category and updates all encrypted references atomically.
      * Entry/category payloads remain encrypted throughout the operation.
      */

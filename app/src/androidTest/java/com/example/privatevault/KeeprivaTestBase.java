@@ -21,6 +21,8 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.SystemClock;
 import android.view.View;
+import android.view.ViewGroup;
+import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Spinner;
 
@@ -85,12 +87,24 @@ public abstract class KeeprivaTestBase {
 
         onView(withText("Create encrypted vault")).perform(click());
 
+        waitForHomeScreen();
+
         onView(withHint("Search title, username, phone, website or notes"))
                 .check(matches(isDisplayed()));
     }
 
     protected void lockVault() {
-        onView(withText("Lock")).perform(scrollTo(), click());
+        /*
+         * The compact header Lock button lives at the top of a long ScrollView.
+         * A coordinate click can race an in-progress programmatic scroll on the
+         * CI emulator. Target its stable accessibility id and invoke the actual
+         * registered listener directly after bringing it into view.
+         */
+        onView(withContentDescription("Lock vault"))
+                .perform(scrollTo(), performClickDirectly());
+
+        waitForUnlockReady();
+
         onView(withText("Unlock")).check(matches(isDisplayed()));
     }
 
@@ -98,8 +112,69 @@ public abstract class KeeprivaTestBase {
         onView(withHint("Master password"))
                 .perform(replaceText(TEST_PASSWORD), closeSoftKeyboard());
         onView(withText("Unlock")).perform(click());
+
+        // PBKDF2 now runs off the Android main thread.
+        waitForHomeScreen();
+
         onView(withHint("Search title, username, phone, website or notes"))
                 .check(matches(isDisplayed()));
+    }
+
+    protected void waitForHomeScreen() {
+        waitForUiState("home screen", view ->
+                view instanceof EditText
+                        && "Search title, username, phone, website or notes".contentEquals(
+                                ((EditText) view).getHint()));
+    }
+
+    protected void waitForUnlockReady() {
+        waitForUiState("unlock screen", view ->
+                view instanceof Button
+                        && "Unlock".contentEquals(((Button) view).getText())
+                        && view.isEnabled());
+    }
+
+    private interface ViewPredicate {
+        boolean matches(View view);
+    }
+
+    private void waitForUiState(String description, ViewPredicate predicate) {
+        if (scenario == null) throw new AssertionError("ActivityScenario is unavailable");
+
+        final long deadline = SystemClock.uptimeMillis() + 45000L;
+
+        while (SystemClock.uptimeMillis() < deadline) {
+            final AtomicBoolean matched = new AtomicBoolean(false);
+
+            scenario.onActivity(activity -> {
+                View root = activity.getWindow() == null
+                        ? null
+                        : activity.getWindow().getDecorView();
+                matched.set(root != null && treeMatches(root, predicate));
+            });
+
+            if (matched.get()) {
+                InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+                return;
+            }
+
+            SystemClock.sleep(75L);
+        }
+
+        throw new AssertionError("Timed out waiting for " + description);
+    }
+
+    private static boolean treeMatches(View view, ViewPredicate predicate) {
+        if (predicate.matches(view)) return true;
+
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                if (treeMatches(group.getChildAt(i), predicate)) return true;
+            }
+        }
+
+        return false;
     }
 
     protected void openAddItem() {
@@ -108,7 +183,10 @@ public abstract class KeeprivaTestBase {
          * the API-35 CI emulator. Invoke the real registered listener directly,
          * then explicitly switch Espresso to the dialog root.
          */
-        onView(withContentDescription("Add item")).perform(performClickDirectly());
+        onView(withContentDescription("Add entry or subcategory"))
+                .perform(scrollTo(), performClickDirectly());
+
+        onView(withText("Entry")).perform(click());
 
         // AlertDialog owns window focus now. Never let Espresso choose the
         // underlying Activity root while the editor dialog is open.
@@ -139,7 +217,9 @@ public abstract class KeeprivaTestBase {
         openAddItem();
         typeItemTitle(titleText);
         saveItemEditor();
-        onView(withText(titleText)).check(matches(isDisplayed()));
+        onView(withContentDescription("Open entry " + titleText))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
     }
 
     protected void createLoginItem(String titleText, String username, String password) {
@@ -155,7 +235,9 @@ public abstract class KeeprivaTestBase {
                 .perform(scrollTo(), replaceText(password), closeSoftKeyboard());
 
         saveItemEditor();
-        onView(withText(titleText)).check(matches(isDisplayed()));
+        onView(withContentDescription("Open entry " + titleText))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
     }
 
     protected void saveItemEditor() {
@@ -208,7 +290,7 @@ public abstract class KeeprivaTestBase {
                 "MainActivity did not regain stable window focus within 5 seconds");
     }
     protected void openSecuritySettings() {
-        onView(withText("Security")).perform(scrollTo(), click());
+        onView(withContentDescription("Security")).perform(scrollTo(), click());
 
         onView(withHint("Master password"))
                 .perform(replaceText(TEST_PASSWORD), closeSoftKeyboard());
@@ -219,9 +301,10 @@ public abstract class KeeprivaTestBase {
     }
 
     protected void createFolderCategory(String name) {
-        onView(withText("Categories")).perform(scrollTo(), click());
-        onView(withText("+ New custom category / sub-category"))
-                .perform(scrollTo(), click());
+        onView(withContentDescription("Manage categories")).perform(scrollTo(), click());
+        onView(withContentDescription("Add category"))
+                .inRoot(isDialog())
+                .perform(click());
 
         onView(withHint("Category name"))
                 .perform(replaceText(name), closeSoftKeyboard());
@@ -229,14 +312,20 @@ public abstract class KeeprivaTestBase {
         onView(withText("Save")).perform(click());
 
         onView(withHint("Search title, username, phone, website or notes"))
+                .perform(scrollTo())
                 .check(matches(isDisplayed()));
     }
 
     protected void selectHomeCategory(String label) {
-        onView(isAssignableFrom(Spinner.class)).perform(click());
-        onData(hasToString(is(label))).perform(click());
-    }
+        onView(withContentDescription("Open category " + label))
+                .perform(scrollTo(), performClickDirectly());
 
+        waitForUiState("expanded category " + label, view -> {
+            CharSequence description = view.getContentDescription();
+            return description != null
+                    && ("Close category " + label).contentEquals(description);
+        });
+    }
     /**
      * Invokes a view's registered OnClickListener directly on the UI thread.
      *
@@ -260,13 +349,13 @@ public abstract class KeeprivaTestBase {
             public void perform(UiController uiController, View view) {
                 if (!view.isEnabled() || !view.isClickable()) {
                     throw new AssertionError(
-                            "Add item view must be enabled and clickable before performClick()");
+                            "Target view must be enabled and clickable before performClick()");
                 }
 
                 boolean handled = view.performClick();
                 if (!handled) {
                     throw new AssertionError(
-                            "View.performClick() returned false; Add item listener was not invoked");
+                            "View.performClick() returned false; target listener was not invoked");
                 }
 
                 uiController.loopMainThreadUntilIdle();

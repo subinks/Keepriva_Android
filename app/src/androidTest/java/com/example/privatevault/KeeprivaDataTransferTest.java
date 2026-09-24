@@ -11,8 +11,10 @@ import static androidx.test.espresso.intent.Intents.intending;
 import static androidx.test.espresso.intent.matcher.IntentMatchers.hasAction;
 import static androidx.test.espresso.intent.matcher.IntentMatchers.hasType;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
+import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;
 import static androidx.test.espresso.matcher.ViewMatchers.withHint;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
+import static androidx.test.espresso.matcher.RootMatchers.isDialog;
 import static org.hamcrest.Matchers.allOf;
 
 import android.app.Activity;
@@ -52,10 +54,10 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
     public void importDialog_hasBothActions() {
         createTestVault();
 
-        onView(withText("Import")).perform(scrollTo(), click());
+        onView(withContentDescription("Import")).perform(scrollTo(), click());
 
-        onView(withText("Download JSON import template")).check(matches(isDisplayed()));
-        onView(withText("Import filled JSON template")).check(matches(isDisplayed()));
+        onView(withContentDescription("Download JSON import template")).check(matches(isDisplayed()));
+        onView(withContentDescription("Import completed JSON template")).check(matches(isDisplayed()));
     }
 
     @Test
@@ -66,8 +68,8 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
                 .respondWith(new android.app.Instrumentation.ActivityResult(
                         Activity.RESULT_CANCELED, null));
 
-        onView(withText("Import")).perform(scrollTo(), click());
-        onView(withText("Download JSON import template")).perform(click());
+        onView(withContentDescription("Import")).perform(scrollTo(), click());
+        onView(withContentDescription("Download JSON import template")).perform(click());
 
         intended(allOf(
                 hasAction(Intent.ACTION_CREATE_DOCUMENT),
@@ -83,8 +85,8 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
                 .respondWith(new android.app.Instrumentation.ActivityResult(
                         Activity.RESULT_CANCELED, null));
 
-        onView(withText("Import")).perform(scrollTo(), click());
-        onView(withText("Import filled JSON template")).perform(click());
+        onView(withContentDescription("Import")).perform(scrollTo(), click());
+        onView(withContentDescription("Import completed JSON template")).perform(click());
 
         intended(allOf(
                 hasAction(Intent.ACTION_OPEN_DOCUMENT),
@@ -96,7 +98,7 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
     public void backupDialog_hasCreateAndRestore() {
         createTestVault();
 
-        onView(withText("Backup")).perform(scrollTo(), click());
+        onView(withContentDescription("Backup & Restore")).perform(scrollTo(), click());
 
         onView(withText("Create encrypted .pvault backup")).check(matches(isDisplayed()));
         onView(withText("Restore encrypted .pvault backup")).check(matches(isDisplayed()));
@@ -106,34 +108,50 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
     public void shortBackupPassword_keepsDialogOpen() {
         createTestVault();
 
-        onView(withText("Backup")).perform(scrollTo(), click());
-        onView(withText("Create encrypted .pvault backup")).perform(click());
+        onView(withContentDescription("Backup & Restore")).perform(scrollTo(), click());
+        onView(withText("Create encrypted .pvault backup"))
+                .inRoot(isDialog())
+                .perform(click());
 
         onView(withHint("Backup password (10+ characters)"))
+                .inRoot(isDialog())
                 .perform(replaceText("short"), closeSoftKeyboard());
         onView(withHint("Confirm backup password"))
+                .inRoot(isDialog())
                 .perform(replaceText("short"), closeSoftKeyboard());
 
-        onView(withText("Continue")).perform(click());
+        onView(withText("Continue"))
+                .inRoot(isDialog())
+                .perform(click());
 
-        onView(withText("Continue")).check(matches(isDisplayed()));
+        onView(withText("Continue"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
     }
 
     @Test
     public void mismatchedBackupPasswords_keepDialogOpen() {
         createTestVault();
 
-        onView(withText("Backup")).perform(scrollTo(), click());
-        onView(withText("Create encrypted .pvault backup")).perform(click());
+        onView(withContentDescription("Backup & Restore")).perform(scrollTo(), click());
+        onView(withText("Create encrypted .pvault backup"))
+                .inRoot(isDialog())
+                .perform(click());
 
         onView(withHint("Backup password (10+ characters)"))
+                .inRoot(isDialog())
                 .perform(replaceText("BackupPass123!"), closeSoftKeyboard());
         onView(withHint("Confirm backup password"))
+                .inRoot(isDialog())
                 .perform(replaceText("DifferentPass123!"), closeSoftKeyboard());
 
-        onView(withText("Continue")).perform(click());
+        onView(withText("Continue"))
+                .inRoot(isDialog())
+                .perform(click());
 
-        onView(withText("Continue")).check(matches(isDisplayed()));
+        onView(withText("Continue"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
     }
 
     @Test
@@ -144,7 +162,7 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
                 .respondWith(new android.app.Instrumentation.ActivityResult(
                         Activity.RESULT_CANCELED, null));
 
-        onView(withText("Backup")).perform(scrollTo(), click());
+        onView(withContentDescription("Backup & Restore")).perform(scrollTo(), click());
         onView(withText("Create encrypted .pvault backup")).perform(click());
 
         onView(withHint("Backup password (10+ characters)"))
@@ -152,7 +170,17 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
         onView(withHint("Confirm backup password"))
                 .perform(replaceText("BackupPass123!"), closeSoftKeyboard());
 
-        onView(withText("Continue")).perform(click());
+        /*
+         * Continue belongs to the backup-password AlertDialog. The click
+         * immediately dismisses that dialog and launches ACTION_CREATE_DOCUMENT.
+         * On the CI emulator the Activity can therefore lose focus before
+         * Espresso's default root picker finishes resolving the click.
+         *
+         * Pin the action to the dialog root that actually owns the button.
+         */
+        onView(withText("Continue"))
+                .inRoot(isDialog())
+                .perform(click());
 
         intended(allOf(
                 hasAction(Intent.ACTION_CREATE_DOCUMENT),
@@ -168,9 +196,19 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
                 .respondWith(new android.app.Instrumentation.ActivityResult(
                         Activity.RESULT_CANCELED, null));
 
-        onView(withText("Backup")).perform(scrollTo(), click());
-        onView(withText("Restore encrypted .pvault backup")).perform(click());
-        onView(withText("Choose .pvault file")).perform(click());
+        onView(withContentDescription("Backup & Restore")).perform(scrollTo(), click());
+
+        onView(withText("Restore encrypted .pvault backup"))
+                .inRoot(isDialog())
+                .perform(click());
+
+        onView(withText("Restore encrypted backup"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
+
+        onView(withText("Choose .pvault file"))
+                .inRoot(isDialog())
+                .perform(click());
 
         intended(hasAction(Intent.ACTION_OPEN_DOCUMENT));
     }
@@ -180,10 +218,13 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
         createTestVault();
         createBasicItem("Export Safe Item");
 
-        onView(withText("Export Safe Item")).perform(click());
-        onView(withText("Export this entry")).perform(click());
+        onView(withContentDescription("Open entry Export Safe Item")).perform(scrollTo(), click());
+        onView(withContentDescription("Export entry"))
+                .inRoot(isDialog())
+                .perform(scrollTo(), click());
         onView(withText("Continue")).perform(click());
 
+        onView(withContentDescription("Export Keepriva JSON")).check(matches(isDisplayed()));
         onView(withText("Formatted text (.txt)")).check(matches(isDisplayed()));
         onView(withText("HTML page (.html)")).check(matches(isDisplayed()));
         onView(withText("PDF document (.pdf)")).check(matches(isDisplayed()));
@@ -194,8 +235,10 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
         createTestVault();
         createLoginItem("Sensitive Export", "user@test.com", "Secret123!");
 
-        onView(withText("Sensitive Export")).perform(click());
-        onView(withText("Export this entry")).perform(click());
+        onView(withContentDescription("Open entry Sensitive Export")).perform(scrollTo(), click());
+        onView(withContentDescription("Export entry"))
+                .inRoot(isDialog())
+                .perform(scrollTo(), click());
         onView(withText("Include passwords")).perform(click());
         onView(withText("Continue")).perform(click());
 
@@ -208,8 +251,10 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
         createTestVault();
         createLoginItem("Wrong Export Password", "user@test.com", "Secret123!");
 
-        onView(withText("Wrong Export Password")).perform(click());
-        onView(withText("Export this entry")).perform(click());
+        onView(withContentDescription("Open entry Wrong Export Password")).perform(scrollTo(), click());
+        onView(withContentDescription("Export entry"))
+                .inRoot(isDialog())
+                .perform(scrollTo(), click());
         onView(withText("Include passwords")).perform(click());
         onView(withText("Continue")).perform(click());
 
@@ -225,8 +270,10 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
         createTestVault();
         createLoginItem("Correct Export Password", "user@test.com", "Secret123!");
 
-        onView(withText("Correct Export Password")).perform(click());
-        onView(withText("Export this entry")).perform(click());
+        onView(withContentDescription("Open entry Correct Export Password")).perform(scrollTo(), click());
+        onView(withContentDescription("Export entry"))
+                .inRoot(isDialog())
+                .perform(scrollTo(), click());
         onView(withText("Include passwords")).perform(click());
         onView(withText("Continue")).perform(click());
 
@@ -234,6 +281,7 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
                 .perform(replaceText(TEST_PASSWORD), closeSoftKeyboard());
         onView(withText("Authenticate")).perform(click());
 
+        onView(withContentDescription("Export Keepriva JSON")).check(matches(isDisplayed()));
         onView(withText("Formatted text (.txt)")).check(matches(isDisplayed()));
         onView(withText("HTML page (.html)")).check(matches(isDisplayed()));
         onView(withText("PDF document (.pdf)")).check(matches(isDisplayed()));

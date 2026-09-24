@@ -4,8 +4,10 @@ import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.action.ViewActions.click;
 import static androidx.test.espresso.action.ViewActions.closeSoftKeyboard;
 import static androidx.test.espresso.action.ViewActions.replaceText;
+import static androidx.test.espresso.action.ViewActions.scrollTo;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
+import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;
 import static androidx.test.espresso.matcher.ViewMatchers.withHint;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
@@ -60,6 +62,7 @@ public class KeeprivaLifecycleRobustnessTest extends KeeprivaTestBase {
         cancelItemEditor();
 
         onView(withHint("Search title, username, phone, website or notes"))
+                .perform(scrollTo())
                 .check(matches(isDisplayed()));
     }
 
@@ -80,6 +83,7 @@ public class KeeprivaLifecycleRobustnessTest extends KeeprivaTestBase {
         waitForActivityWindowFocus();
 
         onView(withHint("Search title, username, phone, website or notes"))
+                .perform(scrollTo())
                 .check(matches(isDisplayed()));
     }
 }

@@ -8,8 +8,13 @@ import static androidx.test.espresso.action.ViewActions.replaceText;
 import static androidx.test.espresso.action.ViewActions.scrollTo;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
+import static androidx.test.espresso.matcher.ViewMatchers.hasSibling;
+import static androidx.test.espresso.matcher.ViewMatchers.hasDescendant;
+import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;
 import static androidx.test.espresso.matcher.ViewMatchers.withHint;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
+import static androidx.test.espresso.matcher.RootMatchers.isDialog;
+import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.hasToString;
 import static org.hamcrest.Matchers.is;
 
@@ -29,11 +34,20 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
     @Test
     public void categoriesDialog_listsBuiltIns() {
         createTestVault();
-        onView(withText("Categories")).perform(scrollTo(), click());
+        onView(withContentDescription("Manage categories")).perform(scrollTo(), click());
 
-        onView(withText("Login")).check(matches(isDisplayed()));
-        onView(withText("Banking")).check(matches(isDisplayed()));
-        onView(withText("Secure Note")).check(matches(isDisplayed()));
+        onView(withText("Login"))
+                .inRoot(isDialog())
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
+        onView(withText("Banking"))
+                .inRoot(isDialog())
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
+        onView(withText("Secure Note"))
+                .inRoot(isDialog())
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
     }
 
     @Test
@@ -41,8 +55,11 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
         createTestVault();
         createFolderCategory("Folder Only");
 
-        onView(withText("Categories")).perform(scrollTo(), click());
-        onView(withText("Folder Only  •  0 fields")).check(matches(isDisplayed()));
+        onView(withContentDescription("Manage categories")).perform(scrollTo(), click());
+        onView(withContentDescription("Category row Folder Only"))
+                .inRoot(isDialog())
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
     }
 
     @Test
@@ -50,8 +67,8 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
         createTestVault();
         createFolderCategory("Duplicate Test");
 
-        onView(withText("Categories")).perform(scrollTo(), click());
-        onView(withText("+ New custom category / sub-category")).perform(scrollTo(), click());
+        onView(withContentDescription("Manage categories")).perform(scrollTo(), click());
+        onView(withContentDescription("Add category")).inRoot(isDialog()).perform(click());
 
         onView(withHint("Category name"))
                 .perform(replaceText("Duplicate Test"), closeSoftKeyboard());
@@ -64,8 +81,8 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
     public void builtInCategoryName_isRejected() {
         createTestVault();
 
-        onView(withText("Categories")).perform(scrollTo(), click());
-        onView(withText("+ New custom category / sub-category")).perform(scrollTo(), click());
+        onView(withContentDescription("Manage categories")).perform(scrollTo(), click());
+        onView(withContentDescription("Add category")).inRoot(isDialog()).perform(click());
 
         onView(withHint("Category name"))
                 .perform(replaceText("Login"), closeSoftKeyboard());
@@ -78,8 +95,8 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
     public void categoryWithCustomFields_canBeCreated() {
         createTestVault();
 
-        onView(withText("Categories")).perform(scrollTo(), click());
-        onView(withText("+ New custom category / sub-category")).perform(scrollTo(), click());
+        onView(withContentDescription("Manage categories")).perform(scrollTo(), click());
+        onView(withContentDescription("Add category")).inRoot(isDialog()).perform(click());
 
         onView(withHint("Category name"))
                 .perform(replaceText("Membership"), closeSoftKeyboard());
@@ -92,8 +109,20 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
 
         onView(withText("Save")).perform(click());
 
-        onView(withText("Categories")).perform(scrollTo(), click());
-        onView(withText("Membership  •  2 fields")).check(matches(isDisplayed()));
+        onView(withContentDescription("Manage categories")).perform(scrollTo(), click());
+        onView(withContentDescription("Category row Membership"))
+                .inRoot(isDialog())
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
+
+        onView(withContentDescription("Edit category Membership"))
+                .inRoot(isDialog())
+                .perform(scrollTo(), click());
+        onView(withHint("Field names - one per line (optional for folder categories)"))
+                .check(matches(withText("Member ID\nPIN")));
+        onView(withHint("Sensitive field names - one per line (optional)"))
+                .check(matches(withText("PIN")));
+        onView(withText("Cancel")).inRoot(isDialog()).perform(click());
     }
 
     @Test
@@ -102,8 +131,10 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
         onView(withText("Preferences")).perform(scrollTo(), click());
 
         onView(withText("Enable editing category nesting depth"))
+                .inRoot(isDialog())
                 .check(matches(isDisplayed()));
         onView(withHint("Maximum category depth (1-5)"))
+                .inRoot(isDialog())
                 .check(matches(isDisplayed()));
     }
 
@@ -112,12 +143,17 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
         createTestVault();
         onView(withText("Preferences")).perform(scrollTo(), click());
 
-        onView(withText("Enable editing category nesting depth")).perform(click());
+        onView(withText("Enable editing category nesting depth"))
+                .inRoot(isDialog())
+                .perform(click());
         onView(withHint("Maximum category depth (1-5)"))
+                .inRoot(isDialog())
                 .perform(replaceText("0"), closeSoftKeyboard());
-        onView(withText("Save")).perform(click());
+        onView(withText("Save")).inRoot(isDialog()).perform(click());
 
-        onView(withText("Save")).check(matches(isDisplayed()));
+        onView(withText("Save"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
     }
 
     @Test
@@ -125,12 +161,17 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
         createTestVault();
         onView(withText("Preferences")).perform(scrollTo(), click());
 
-        onView(withText("Enable editing category nesting depth")).perform(click());
+        onView(withText("Enable editing category nesting depth"))
+                .inRoot(isDialog())
+                .perform(click());
         onView(withHint("Maximum category depth (1-5)"))
+                .inRoot(isDialog())
                 .perform(replaceText("6"), closeSoftKeyboard());
-        onView(withText("Save")).perform(click());
+        onView(withText("Save")).inRoot(isDialog()).perform(click());
 
-        onView(withText("Save")).check(matches(isDisplayed()));
+        onView(withText("Save"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
     }
 
     @Test
@@ -138,21 +179,161 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
         createTestVault();
         onView(withText("Preferences")).perform(scrollTo(), click());
 
-        onView(withText("Enable editing category nesting depth")).perform(click());
+        onView(withText("Enable editing category nesting depth"))
+                .inRoot(isDialog())
+                .perform(click());
         onView(withHint("Maximum category depth (1-5)"))
+                .inRoot(isDialog())
                 .perform(replaceText("5"), closeSoftKeyboard());
-        onView(withText("Save")).perform(click());
+        onView(withText("Save")).inRoot(isDialog()).perform(click());
 
         onView(withHint("Search title, username, phone, website or notes"))
+                .perform(scrollTo())
                 .check(matches(isDisplayed()));
     }
 
+    @Test
+    public void categoryTree_countReflectsStoredEntryAfterHomeRebuild() {
+        createTestVault();
+        createBasicItem("Counted Login Item");
+
+        /*
+         * Rebuild the home screen through the real lock/unlock flow.
+         * Patch 18 loads entries before constructing the category tree, so the
+         * Login row must now be created with the persisted item count.
+         */
+        lockVault();
+        unlockWithTestPassword();
+
+        onView(withContentDescription("Open category Login"))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
+
+        onView(allOf(
+                withText("Category • 1 entry"),
+                hasSibling(withText("Login"))))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
+    }
+    @Test
+    public void builtInCategories_haveDistinctSemanticIcons() {
+        createTestVault();
+        onView(withContentDescription("Category icon Login")).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Category icon Website")).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Category icon App")).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Category icon Contact")).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Category icon Banking")).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Category icon Work")).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Category icon Personal")).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Category icon Secure Note")).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Category icon Other")).perform(scrollTo()).check(matches(isDisplayed()));
+    }
+
+    @Test
+    public void customCategory_usesCommonCustomIcon() {
+        createTestVault();
+        createFolderCategory("Custom Icon Test");
+        onView(withContentDescription("Category icon Custom")).perform(scrollTo()).check(matches(isDisplayed()));
+    }
+
+    @Test
+    public void subCategory_inheritsBuiltInParentIcon() {
+        createTestVault();
+        selectHomeCategory("Login");
+
+        onView(withContentDescription("Add entry or subcategory"))
+                .perform(scrollTo(), click());
+        onView(withText("Sub Category")).perform(click());
+
+        onView(withHint("Category name"))
+                .perform(replaceText("Login Child"), closeSoftKeyboard());
+        onView(withText("Save")).perform(click());
+
+        /*
+         * Verify the icon inside the Login Child row itself.
+         *
+         * Do not use withIndex(..., 1): Espresso can evaluate a stateful indexed
+         * matcher more than once while resolving/scrolling, which made this test
+         * flaky even though the child row was present.
+         */
+        onView(allOf(
+                withContentDescription("Open category Login Child"),
+                hasDescendant(withContentDescription("Category icon Login"))))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
+    }
+
+    @Test
+    public void customCategoryActions_areCompactIconButtons() {
+        createTestVault();
+        createFolderCategory("Action Icon Test");
+
+        onView(withContentDescription("Manage categories"))
+                .perform(scrollTo(), click());
+        onView(withContentDescription("Edit category Action Icon Test"))
+                .inRoot(isDialog())
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
+        onView(withContentDescription("Delete category Action Icon Test"))
+                .inRoot(isDialog())
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
+    }
+    @Test
+    public void categoryManager_usesCompactAccessibleControls() {
+        createTestVault();
+        createFolderCategory("Compact Row Test");
+
+        onView(withContentDescription("Manage categories")).perform(scrollTo(), click());
+        onView(withContentDescription("Add category"))
+                .inRoot(isDialog()).check(matches(isDisplayed()));
+        onView(withContentDescription("Close category manager"))
+                .inRoot(isDialog()).check(matches(isDisplayed()));
+        onView(withContentDescription("Category row Compact Row Test"))
+                .inRoot(isDialog()).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Edit category Compact Row Test"))
+                .inRoot(isDialog()).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Delete category Compact Row Test"))
+                .inRoot(isDialog()).perform(scrollTo()).check(matches(isDisplayed()));
+    }
+
+    @Test
+    public void builtInCategory_exposesDeleteAction() {
+        createTestVault();
+        onView(withContentDescription("Manage categories")).perform(scrollTo(), click());
+        onView(withContentDescription("Delete category Login"))
+                .inRoot(isDialog()).perform(scrollTo()).check(matches(isDisplayed()));
+    }
+    @Test
+    public void quickAddMenu_showsEntryAndSubCategoryOptions() {
+        createTestVault();
+
+        onView(withContentDescription("Add entry or subcategory"))
+                .perform(scrollTo(), click());
+
+        onView(withText("Entry")).check(matches(isDisplayed()));
+        onView(withText("Sub Category")).check(matches(isDisplayed()));
+    }
+
+    @Test
+    public void searchForSubCategory_showsTreePath() {
+        createTestVault();
+        createFolderCategory("Search Child");
+
+        onView(withHint("Search title, username, phone, website or notes"))
+                .perform(scrollTo(), replaceText("Search Child"), closeSoftKeyboard());
+
+        onView(withContentDescription("Close category Search Child"))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
+    }
     @Test
     public void customCategoryAppearsInHomeFilter() {
         createTestVault();
         createFolderCategory("Filter Category");
 
-        onView(ViewMatchers.isAssignableFrom(Spinner.class)).perform(click());
-        onData(hasToString(is("Filter Category"))).check(matches(isDisplayed()));
+        onView(withContentDescription("Open category Filter Category"))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
     }
 }

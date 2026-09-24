@@ -7,6 +7,7 @@ import static androidx.test.espresso.action.ViewActions.replaceText;
 import static androidx.test.espresso.action.ViewActions.scrollTo;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
+import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;
 import static androidx.test.espresso.matcher.ViewMatchers.withHint;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
@@ -75,19 +76,20 @@ public class KeeprivaAuthHomeTest extends KeeprivaTestBase {
     public void home_containsCoreActions() {
         createTestVault();
 
-        onView(withText("Categories")).check(matches(isDisplayed()));
-        onView(withText("Import")).check(matches(isDisplayed()));
-        onView(withText("Export")).check(matches(isDisplayed()));
-        onView(withText("Backup")).check(matches(isDisplayed()));
+        onView(withContentDescription("Manage categories")).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Import")).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Export")).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Backup & Restore")).perform(scrollTo()).check(matches(isDisplayed()));
     }
 
     @Test
     public void homeAdditionalActions_canBeScrolledIntoView() {
         createTestVault();
 
+        // Assert the top header before scrolling the home view downward.
+        onView(withContentDescription("Lock vault")).check(matches(isDisplayed()));
         onView(withText("Preferences")).perform(scrollTo()).check(matches(isDisplayed()));
         onView(withText("Security")).perform(scrollTo()).check(matches(isDisplayed()));
-        onView(withText("Lock")).perform(scrollTo()).check(matches(isDisplayed()));
     }
 
     @Test
@@ -108,6 +110,7 @@ public class KeeprivaAuthHomeTest extends KeeprivaTestBase {
                 .perform(replaceText("WrongPassword123!"), closeSoftKeyboard());
         onView(withText("Unlock")).perform(click());
 
+        waitForUnlockReady();
         onView(withText("Unlock")).check(matches(isDisplayed()));
     }
 
@@ -121,7 +124,8 @@ public class KeeprivaAuthHomeTest extends KeeprivaTestBase {
     @Test
     public void emptyVault_showsEmptyState() {
         createTestVault();
-        onView(withText("No items yet. Tap + to add your first credential or note."))
+        onView(withContentDescription("Empty vault"))
+                .perform(scrollTo())
                 .check(matches(isDisplayed()));
     }
 }

@@ -16,8 +16,10 @@ permissions:
   contents: read
 
 concurrency:
-  group: keepriva-android-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  group: >-
+    keepriva-android-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: >-
+    ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
 
 env:
   APK_ARTIFACT_NAME: keepriva-apks-${{ github.sha }}

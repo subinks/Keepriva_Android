@@ -9,6 +9,8 @@ readonly OUTPUT_DIR="ci-artifacts/visual"
 readonly SCREENSHOT_DIR="$OUTPUT_DIR/screenshots"
 readonly UI_DIR="$OUTPUT_DIR/ui"
 readonly LOG_DIR="$OUTPUT_DIR/logs"
+readonly UI_DUMP_ATTEMPTS=12
+readonly UI_DUMP_RETRY_DELAY_SECONDS=1
 
 mkdir -p "$SCREENSHOT_DIR" "$UI_DIR" "$LOG_DIR"
 
@@ -38,9 +40,40 @@ trap on_exit EXIT
 dump_ui() {
   local remote_file="$1"
   local local_file="$2"
-  adb shell uiautomator dump "$remote_file" >/dev/null
-  adb pull "$remote_file" "$local_file" >/dev/null
-  test -s "$local_file"
+  local expected_text="${3:-<hierarchy}"
+  local description="${4:-UI hierarchy}"
+  local attempt
+  local dump_output
+
+  for attempt in $(seq 1 "$UI_DUMP_ATTEMPTS"); do
+    adb shell rm -f "$remote_file" >/dev/null 2>&1 || true
+    rm -f "$local_file"
+
+    dump_output="$(adb shell uiautomator dump "$remote_file" 2>&1)" || true
+    if adb pull "$remote_file" "$local_file" >/dev/null 2>&1 \
+       && [[ -s "$local_file" ]] \
+       && grep -Fq '<hierarchy' "$local_file" \
+       && grep -Fq "$expected_text" "$local_file"; then
+      if (( attempt > 1 )); then
+        echo "PASS: $description became available on UI dump attempt $attempt."
+      fi
+      return 0
+    fi
+
+    {
+      echo "Attempt $attempt/$UI_DUMP_ATTEMPTS: $description was not ready."
+      if [[ -n "$dump_output" ]]; then
+        echo "$dump_output"
+      fi
+    } >> "$LOG_DIR/uiautomator-dump-retries.log"
+
+    if (( attempt < UI_DUMP_ATTEMPTS )); then
+      sleep "$UI_DUMP_RETRY_DELAY_SECONDS"
+    fi
+  done
+
+  echo "ERROR: $description did not become available after $UI_DUMP_ATTEMPTS attempts." >&2
+  return 1
 }
 
 test -s "$TARGET_APK"
@@ -72,8 +105,12 @@ adb logcat -c || true
 echo "=== Capture fresh setup screen ==="
 adb shell am start -W -n "$TARGET_PACKAGE/$ACTIVITY"
 sleep 3
+dump_ui \
+  /sdcard/keepriva-setup.xml \
+  "$UI_DIR/01-fresh-install-ui.xml" \
+  "Create Keepriva" \
+  "fresh setup screen"
 adb exec-out screencap -p > "$SCREENSHOT_DIR/01-fresh-install-setup.png"
-dump_ui /sdcard/keepriva-setup.xml "$UI_DIR/01-fresh-install-ui.xml"
 grep -q "Create Keepriva" "$UI_DIR/01-fresh-install-ui.xml"
 grep -q "Create encrypted vault" "$UI_DIR/01-fresh-install-ui.xml"
 
@@ -96,12 +133,46 @@ def adb(*args, check=True):
     )
 
 
-def dump():
-    adb("shell", "uiautomator", "dump", "/sdcard/window.xml", check=False)
-    result = adb("shell", "cat", "/sdcard/window.xml", check=False)
-    if not result.stdout.strip():
-        raise RuntimeError("UI hierarchy dump is empty")
-    return ET.fromstring(result.stdout)
+def dump(attempts=12, delay_seconds=1):
+    last_error = "UI hierarchy dump did not run"
+
+    for attempt in range(1, attempts + 1):
+        adb("shell", "rm", "-f", "/sdcard/window.xml", check=False)
+        dump_result = adb(
+            "shell",
+            "uiautomator",
+            "dump",
+            "/sdcard/window.xml",
+            check=False,
+        )
+        result = adb("shell", "cat", "/sdcard/window.xml", check=False)
+
+        if dump_result.returncode == 0 and result.stdout.strip():
+            try:
+                root = ET.fromstring(result.stdout)
+                if root.tag == "hierarchy":
+                    if attempt > 1:
+                        print(
+                            "UI hierarchy became available on "
+                            f"attempt {attempt}/{attempts}."
+                        )
+                    return root
+                last_error = f"unexpected XML root: {root.tag}"
+            except ET.ParseError as error:
+                last_error = f"invalid UI hierarchy XML: {error}"
+        else:
+            last_error = (
+                dump_result.stderr.strip()
+                or dump_result.stdout.strip()
+                or "UI hierarchy dump is empty"
+            )
+
+        if attempt < attempts:
+            time.sleep(delay_seconds)
+
+    raise RuntimeError(
+        f"UI hierarchy unavailable after {attempts} attempts: {last_error}"
+    )
 
 
 def center(bounds):
@@ -148,8 +219,12 @@ tap_node(button)
 time.sleep(3)
 PY
 
+dump_ui \
+  /sdcard/keepriva-home.xml \
+  "$UI_DIR/02-vault-home-ui.xml" \
+  "Search title, username, phone, website or notes" \
+  "vault home screen"
 adb exec-out screencap -p > "$SCREENSHOT_DIR/02-vault-home.png"
-dump_ui /sdcard/keepriva-home.xml "$UI_DIR/02-vault-home-ui.xml"
 grep -q "Search title, username, phone, website or notes" "$UI_DIR/02-vault-home-ui.xml"
 
 echo "=== Capture master-password unlock screen ==="
@@ -158,8 +233,12 @@ adb shell input keyevent KEYCODE_WAKEUP || true
 adb shell wm dismiss-keyguard || true
 adb shell am start -W -n "$TARGET_PACKAGE/$ACTIVITY"
 sleep 3
+dump_ui \
+  /sdcard/keepriva-unlock.xml \
+  "$UI_DIR/03-real-unlock-ui.xml" \
+  'content-desc="Master password"' \
+  "master-password unlock screen"
 adb exec-out screencap -p > "$SCREENSHOT_DIR/03-real-unlock-screen.png"
-dump_ui /sdcard/keepriva-unlock.xml "$UI_DIR/03-real-unlock-ui.xml"
 grep -q 'content-desc="Master password"' "$UI_DIR/03-real-unlock-ui.xml"
 grep -q 'content-desc="Unlock with master password"' "$UI_DIR/03-real-unlock-ui.xml"
 
@@ -212,10 +291,12 @@ adb shell wm dismiss-keyguard || true
 adb shell am start -W -n "$TARGET_PACKAGE/$ACTIVITY" || true
 sleep 3
 
+dump_ui \
+  /sdcard/keepriva-biometric.xml \
+  "$UI_DIR/04-biometric-diagnostic-ui.xml" \
+  '<hierarchy' \
+  "optional biometric diagnostic screen" || true
 adb exec-out screencap -p > "$SCREENSHOT_DIR/04-biometric-diagnostic.png" || true
-adb shell uiautomator dump /sdcard/keepriva-biometric.xml >/dev/null 2>&1 || true
-adb pull /sdcard/keepriva-biometric.xml "$UI_DIR/04-biometric-diagnostic-ui.xml" \
-  >/dev/null 2>&1 || true
 
 if [[ -s "$UI_DIR/04-biometric-diagnostic-ui.xml" ]] \
    && grep -q 'content-desc="Unlock Keepriva with biometrics"' \

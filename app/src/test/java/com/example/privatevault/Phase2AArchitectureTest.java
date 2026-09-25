@@ -92,5 +92,119 @@ public class Phase2AArchitectureTest {
         assertEquals(Arrays.asList("last", "failing", "first"), order);
         assertEquals(0, registry.sizeForTesting());
     }
-}
 
+    @Test
+    public void callbackGeneration_invalidatesLateCallbacks() {
+        CallbackGeneration generation = new CallbackGeneration();
+        CallbackGeneration.Token original = generation.capture();
+
+        assertTrue(generation.isCurrent(original));
+        generation.invalidate();
+
+        assertFalse(generation.isCurrent(original));
+        assertTrue(generation.isCurrent(generation.capture()));
+    }
+
+    @Test
+    public void dialogRegistry_dismissesInReverseOrderAndClosesIdempotently() {
+        DialogRegistry registry = new DialogRegistry();
+        List<String> order = new ArrayList<>();
+        FakeDialog first = new FakeDialog("first", order);
+        FakeDialog second = new FakeDialog("second", order);
+        registry.register(first);
+        registry.register(second);
+
+        registry.close();
+        registry.close();
+
+        assertEquals(Arrays.asList("second", "first"), order);
+        assertEquals(0, registry.sizeForTesting());
+        assertTrue(registry.isClosedForTesting());
+    }
+
+    @Test
+    public void dialogRegistry_rejectsDialogsOpenedByDismissCallbacks() {
+        DialogRegistry registry = new DialogRegistry();
+        List<String> order = new ArrayList<>();
+        FakeDialog late = new FakeDialog("late", order);
+        FakeDialog first = new FakeDialog("first", order,
+                () -> assertFalse(registry.register(late)));
+        registry.register(first);
+
+        registry.dismissAll();
+
+        assertEquals(Arrays.asList("first"), order);
+        assertEquals(0, registry.sizeForTesting());
+        assertTrue(late.isShowing());
+    }
+
+    @Test
+    public void actionContracts_declareNoStateFields() {
+        Class<?>[] contracts = {
+                SetupActions.class,
+                UnlockActions.class,
+                SecuritySettingsActions.class,
+                VaultBrowserActions.class,
+                CategoryManagementActions.class,
+                ItemDialogActions.class,
+                DataTransferActions.class
+        };
+
+        for (Class<?> contract : contracts) {
+            assertTrue(contract.isInterface());
+            assertEquals(contract.getSimpleName() + " must not own state",
+                    0, contract.getDeclaredFields().length);
+        }
+    }
+
+    @Test
+    public void controllerInfrastructure_hasNoSecretOrDecryptedModelFields() {
+        Class<?>[] infrastructure = {
+                ControllerRegistry.class,
+                DialogRegistry.class,
+                VaultRootRenderer.class,
+                VaultViewFactory.class,
+                CallbackGeneration.class
+        };
+
+        for (Class<?> type : infrastructure) {
+            Arrays.stream(type.getDeclaredFields()).forEach(field -> {
+                assertFalse(type.getSimpleName() + " must not own SecretKey",
+                        SecretKey.class.isAssignableFrom(field.getType()));
+                assertFalse(type.getSimpleName() + " must not own VaultItem",
+                        VaultItem.class.isAssignableFrom(field.getType()));
+                assertFalse(type.getSimpleName() + " must not own byte arrays",
+                        field.getType().equals(byte[].class));
+            });
+        }
+    }
+
+    private static final class FakeDialog implements DialogRegistry.DialogHandle {
+        private final String name;
+        private final List<String> order;
+        private final Runnable onDismiss;
+        private boolean showing = true;
+
+        private FakeDialog(String name, List<String> order) {
+            this(name, order, () -> { });
+        }
+
+        private FakeDialog(String name, List<String> order, Runnable onDismiss) {
+            this.name = name;
+            this.order = order;
+            this.onDismiss = onDismiss;
+        }
+
+        @Override
+        public boolean isShowing() {
+            return showing;
+        }
+
+        @Override
+        public void dismiss() {
+            showing = false;
+            order.add(name);
+            onDismiss.run();
+        }
+    }
+}

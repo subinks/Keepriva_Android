@@ -97,8 +97,12 @@ public class MainActivity extends Activity {
     }
 
     private final VaultSessionCoordinator vaultSession = new VaultSessionCoordinator();
+    private final CallbackGeneration callbackGeneration = new CallbackGeneration();
+    private final ControllerRegistry controllerRegistry = new ControllerRegistry();
+    private final DialogRegistry dialogRegistry = controllerRegistry.register(new DialogRegistry());
     private VaultDatabase database;
     private VaultRootRenderer rootRenderer;
+    private VaultViewFactory viewFactory;
     private final VaultScreenRouter screenRouter = new VaultScreenRouter();
     private LinearLayout listContainer;
     private EditText searchBox;
@@ -132,6 +136,7 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         ScreenSecurityManager.protect(this);
+        viewFactory = new VaultViewFactory(this);
         FrameLayout rootContent = new FrameLayout(this);
         rootContent.setContentDescription("Keepriva root content");
         setContentView(rootContent);
@@ -180,6 +185,8 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        callbackGeneration.invalidate();
+        controllerRegistry.close();
         if (screenOffReceiverRegistered) {
             try { unregisterReceiver(screenOffReceiver); } catch (Exception ignored) { }
             screenOffReceiverRegistered = false;
@@ -415,6 +422,7 @@ public class MainActivity extends Activity {
     }
 
     private void unlockInBackground(String password, EditText pass, Button unlock, ProgressBar progress) {
+        CallbackGeneration.Token callbackToken = callbackGeneration.capture();
         unlockExecutor.execute(() -> {
             SecretKey unlocked = null;
             Exception failure = null;
@@ -437,7 +445,7 @@ public class MainActivity extends Activity {
             final Exception error = failure;
 
             runOnUiThread(() -> {
-                if (isFinishing() || isDestroyed()) return;
+                if (!callbackGeneration.isCurrent(callbackToken) || isFinishing() || isDestroyed()) return;
 
                 if (error == null && result != null) {
                     vaultSession.unlock(result);
@@ -541,19 +549,19 @@ public class MainActivity extends Activity {
     private void showBiometricSettings() {
         if (!vaultSession.isUnlocked()) return;
         if (isBiometricUnlockConfigured()) {
-            new AlertDialog.Builder(this)
+            showDialog(new AlertDialog.Builder(this)
                     .setTitle("Biometric unlock")
                     .setMessage("Biometric unlock is enabled on this device. The master password remains the recovery method.")
                     .setPositiveButton("Disable", (d, w) -> disableBiometricUnlock())
                     .setNegativeButton("Cancel", null)
-                    .show();
+                    .create());
         } else {
-            new AlertDialog.Builder(this)
+            showDialog(new AlertDialog.Builder(this)
                     .setTitle("Enable biometric unlock?")
                     .setMessage("Your fingerprint or strong face authentication will authorize Android Keystore to unwrap the vault key. Your master password remains available as fallback and recovery.")
                     .setPositiveButton("Enable", (d, w) -> enableBiometricUnlock())
                     .setNegativeButton("Cancel", null)
-                    .show();
+                    .create());
         }
     }
 
@@ -865,7 +873,7 @@ public class MainActivity extends Activity {
             dialog.dismiss();
             toast("Maximum category depth set to " + requested + ".");
         }));
-        dialog.show();
+        showDialog(dialog);
     }
 
     private String autoLockLabel(long timeout) {
@@ -902,7 +910,7 @@ public class MainActivity extends Activity {
                 toast("Incorrect master password.");
             }
         }));
-        dialog.show();
+        showDialog(dialog);
     }
 
     private void showSecuritySettings() {
@@ -961,7 +969,7 @@ public class MainActivity extends Activity {
                 .create();
         root.setTag(dialog);
         ScreenSecurityManager.protect(dialog);
-        dialog.show();
+        showDialog(dialog);
     }
 
     private void showAutoLockSettings() {
@@ -1005,7 +1013,7 @@ public class MainActivity extends Activity {
         }));
 
         ScreenSecurityManager.protect(dialog);
-        dialog.show();
+        showDialog(dialog);
     }
 
     private String validateNewMasterPassword(String password) {
@@ -1073,7 +1081,7 @@ public class MainActivity extends Activity {
                 toast("Current master password is incorrect or the password change could not be saved.");
             }
         }));
-        dialog.show();
+        showDialog(dialog);
     }
 
     private long getClipboardTimeoutMs() {
@@ -1132,7 +1140,7 @@ public class MainActivity extends Activity {
         }));
 
         ScreenSecurityManager.protect(dialog);
-        dialog.show();
+        showDialog(dialog);
     }
 
     private void copyPasswordToClipboard(String password) {
@@ -1152,6 +1160,8 @@ public class MainActivity extends Activity {
         showUnlockScreen();
     }
     private void clearSessionState() {
+        callbackGeneration.invalidate();
+        dialogRegistry.dismissAll();
         screenRouter.clear();
         vaultSession.clear();
         allItems.clear();
@@ -1923,12 +1933,12 @@ public class MainActivity extends Activity {
         deleteItem.setOnClickListener(v -> confirmDelete(item, d));
         closeDetails.setOnClickListener(v -> d.dismiss());
         ScreenSecurityManager.protect(d);
-        d.show();
+        showDialog(d);
     }
 
     private void confirmDelete(VaultItem item, AlertDialog parent) {
         final VaultItem deletedSnapshot = copyVaultItem(item);
-        new AlertDialog.Builder(this)
+        showDialog(new AlertDialog.Builder(this)
                 .setTitle("Delete item?")
                 .setMessage("Delete \"" + safe(item.title) + "\" from the vault? You can undo this deletion immediately afterward.")
                 .setPositiveButton("Delete", (d, w) -> {
@@ -1937,7 +1947,7 @@ public class MainActivity extends Activity {
                     loadItems();
                     showUndoDeletedItem(deletedSnapshot);
                 })
-                .setNegativeButton("Cancel", null).show();
+                .setNegativeButton("Cancel", null).create());
     }
 
     private VaultItem copyVaultItem(VaultItem source) {
@@ -1961,7 +1971,7 @@ public class MainActivity extends Activity {
     }
 
     private void showUndoDeletedItem(VaultItem deletedSnapshot) {
-        new AlertDialog.Builder(this)
+        showDialog(new AlertDialog.Builder(this)
                 .setTitle("Item deleted")
                 .setMessage("\"" + safe(deletedSnapshot.title) + "\" was deleted.")
                 .setPositiveButton("Undo", (d, w) -> {
@@ -1974,7 +1984,7 @@ public class MainActivity extends Activity {
                     }
                 })
                 .setNegativeButton("Dismiss", null)
-                .show();
+                .create());
     }
 
     private void showEditDialog(VaultItem existing) {
@@ -2155,7 +2165,7 @@ public class MainActivity extends Activity {
         });
 
         ScreenSecurityManager.protect(d);
-        d.show();
+        showDialog(d);
     }
 
     private void applyCategoryFormLayout(
@@ -2403,7 +2413,7 @@ public class MainActivity extends Activity {
                         (int) (getResources().getDisplayMetrics().heightPixels * 0.88f));
             }
         });
-        dialog.show();
+        showDialog(dialog);
     }
 
     private LinearLayout compactCategoryRow(String name, int depth) {
@@ -2573,7 +2583,7 @@ public class MainActivity extends Activity {
             } catch (Exception e) { toast("Could not save category."); }
         }));
         ScreenSecurityManager.protect(d);
-        d.show();
+        showDialog(d);
     }
 
     private Set<String> hiddenBuiltInCategories() {
@@ -2654,7 +2664,7 @@ public class MainActivity extends Activity {
                                         categoryName, customCategory, subtreeNames)));
             });
             ScreenSecurityManager.protect(dialog);
-            dialog.show();
+            showDialog(dialog);
             return;
         }
 
@@ -2697,7 +2707,7 @@ public class MainActivity extends Activity {
                                     descendantCount)));
         });
         ScreenSecurityManager.protect(dialog);
-        dialog.show();
+        showDialog(dialog);
     }
 
     private int directItemCount(String categoryName) {
@@ -2752,7 +2762,7 @@ public class MainActivity extends Activity {
             cancel.setContentDescription("Cancel permanent category deletion");
         });
         ScreenSecurityManager.protect(confirm);
-        confirm.show();
+        showDialog(confirm);
     }
 
     private void performCategorySubtreeDelete(String categoryName,
@@ -2808,7 +2818,7 @@ public class MainActivity extends Activity {
                         (dlg, which) -> confirmMoveContentsAndDelete(sourceCategory, choices[which].name, entryCount, childCount))
                 .setNegativeButton("Cancel", null).create();
         ScreenSecurityManager.protect(dialog);
-        dialog.show();
+        showDialog(dialog);
     }
 
     private void confirmMoveContentsAndDelete(CustomCategory sourceCategory, String destinationCategory,
@@ -2833,7 +2843,7 @@ public class MainActivity extends Activity {
                 })
                 .setNegativeButton("Cancel", null).create();
         ScreenSecurityManager.protect(dialog);
-        dialog.show();
+        showDialog(dialog);
     }
 
     private void exportSelectedCategory() {
@@ -2855,7 +2865,7 @@ public class MainActivity extends Activity {
         includeSensitive.setChecked(false);
         box.addView(warning); box.addView(includePasswords); box.addView(includeSensitive);
 
-        new AlertDialog.Builder(this)
+        showDialog(new AlertDialog.Builder(this)
                 .setTitle("Export security")
                 .setView(box)
                 .setPositiveButton("Continue", (d, w) -> {
@@ -2869,7 +2879,7 @@ public class MainActivity extends Activity {
                     }
                 })
                 .setNegativeButton("Cancel", null)
-                .show();
+                .create());
     }
 
     private Map<String, java.util.Set<String>> sensitiveCustomFieldsByCategory() {
@@ -2911,7 +2921,7 @@ public class MainActivity extends Activity {
         }));
 
         ScreenSecurityManager.protect(dialog);
-        dialog.show();
+        showDialog(dialog);
     }
 
     private SecretKey unlockLegacyForVerification(String password, SharedPreferences prefs) throws Exception {
@@ -2968,7 +2978,7 @@ public class MainActivity extends Activity {
         });
 
         ScreenSecurityManager.protect(dialog);
-        dialog.show();
+        showDialog(dialog);
     }
 
     private void prepareExport(List<VaultItem> items, String suggestedName, int format, ExportManager.Options options) {
@@ -3059,7 +3069,7 @@ public class MainActivity extends Activity {
         });
 
         ScreenSecurityManager.protect(dialog);
-        dialog.show();
+        showDialog(dialog);
     }
 
     private void promptCreateBackupPassword() {
@@ -3102,7 +3112,7 @@ public class MainActivity extends Activity {
         }));
 
         ScreenSecurityManager.protect(dialog);
-        dialog.show();
+        showDialog(dialog);
     }
 
     private void createEncryptedBackup(char[] backupPassword) {
@@ -3125,7 +3135,7 @@ public class MainActivity extends Activity {
     }
 
     private void chooseBackupForRestore() {
-        new AlertDialog.Builder(this)
+        showDialog(new AlertDialog.Builder(this)
                 .setTitle("Restore encrypted backup")
                 .setMessage("Restore replaces the current vault entries and custom categories only after the selected backup has been decrypted and validated. Your current master password and biometric settings are kept.")
                 .setPositiveButton("Choose .pvault file", (d, w) -> {
@@ -3136,7 +3146,7 @@ public class MainActivity extends Activity {
                     startActivityForResult(intent, BACKUP_RESTORE_REQUEST);
                 })
                 .setNegativeButton("Cancel", null)
-                .show();
+                .create());
     }
 
     private void promptRestorePassword(byte[] backupBytes) {
@@ -3173,25 +3183,25 @@ public class MainActivity extends Activity {
         dialog.setOnCancelListener(d -> java.util.Arrays.fill(backupBytes, (byte) 0));
 
         ScreenSecurityManager.protect(dialog);
-        dialog.show();
+        showDialog(dialog);
     }
 
     private void showRestorePreview(BackupManager.RestoredBackup restored) {
         if (restored.sourceSchemaVersion > database.currentSchemaVersion()) {
-            new AlertDialog.Builder(this)
+            showDialog(new AlertDialog.Builder(this)
                     .setTitle("Backup is newer than this app")
                     .setMessage("This backup was created from vault schema " + restored.sourceSchemaVersion
                             + ", but this app supports schema " + database.currentSchemaVersion()
                             + ". Update Keepriva before restoring it.")
-                    .setPositiveButton("Close", null).show();
+                    .setPositiveButton("Close", null).create());
             return;
         }
         String hierarchyError = validateCategoryHierarchy(restored.categories, getMaxCategoryDepth());
         if (hierarchyError != null) {
-            new AlertDialog.Builder(this)
+            showDialog(new AlertDialog.Builder(this)
                     .setTitle("Backup category hierarchy cannot be restored")
                     .setMessage(hierarchyError + "\n\nOpen Preferences and increase the category nesting depth if appropriate, then retry restore.")
-                    .setPositiveButton("Close", null).show();
+                    .setPositiveButton("Close", null).create());
             return;
         }
         String message = "Backup entries: " + restored.items.size()
@@ -3199,7 +3209,7 @@ public class MainActivity extends Activity {
                 + "\nSource schema version: " + restored.sourceSchemaVersion
                 + "\n\nRestoring will REPLACE the current entries and custom categories."
                 + "\n\nThe operation is transactional: if a write fails, the existing vault remains intact.";
-        new AlertDialog.Builder(this)
+        showDialog(new AlertDialog.Builder(this)
                 .setTitle("Restore preview")
                 .setMessage(message)
                 .setPositiveButton("Replace current vault", (d,w) -> {
@@ -3213,7 +3223,7 @@ public class MainActivity extends Activity {
                     }
                 })
                 .setNegativeButton("Cancel", null)
-                .show();
+                .create());
     }
 
     private void showImportDialog() {
@@ -3269,7 +3279,7 @@ public class MainActivity extends Activity {
         });
 
         ScreenSecurityManager.protect(dialog);
-        dialog.show();
+        showDialog(dialog);
     }
 
     private void downloadImportTemplate() {
@@ -3332,20 +3342,20 @@ public class MainActivity extends Activity {
             int limit = Math.min(parsed.errors.size(), 8);
             for (int i = 0; i < limit; i++) message.append("\n• ").append(parsed.errors.get(i));
             if (parsed.errors.size() > limit) message.append("\n• … and ").append(parsed.errors.size() - limit).append(" more");
-            new AlertDialog.Builder(this).setTitle("Import validation failed")
-                    .setMessage(message.toString()).setPositiveButton("Close", null).show();
+            showDialog(new AlertDialog.Builder(this).setTitle("Import validation failed")
+                    .setMessage(message.toString()).setPositiveButton("Close", null).create());
             return;
         }
         if (parsed.items.isEmpty()) {
-            new AlertDialog.Builder(this).setTitle("Nothing to import")
-                    .setMessage(message.toString()).setPositiveButton("Close", null).show();
+            showDialog(new AlertDialog.Builder(this).setTitle("Nothing to import")
+                    .setMessage(message.toString()).setPositiveButton("Close", null).create());
             return;
         }
         message.append("\n\nOn import, all entry fields—including fields marked sensitive—are encrypted before being written to the local vault database.");
-        new AlertDialog.Builder(this).setTitle("Import preview")
+        showDialog(new AlertDialog.Builder(this).setTitle("Import preview")
                 .setMessage(message.toString())
                 .setPositiveButton("Import", (d, w) -> commitImport(parsed))
-                .setNegativeButton("Cancel", null).show();
+                .setNegativeButton("Cancel", null).create());
     }
 
     private void commitImport(ImportManager.ParsedImport parsed) {
@@ -3439,53 +3449,27 @@ public class MainActivity extends Activity {
     }
 
     private EditText phoneField(String hint, String value) {
-        EditText e = field(hint, value);
-        e.setInputType(InputType.TYPE_CLASS_PHONE);
-        return e;
+        return viewFactory.phoneField(hint, value);
     }
 
     private LinearLayout baseVertical(int gapDp) {
-        LinearLayout l = new LinearLayout(this);
-        l.setOrientation(LinearLayout.VERTICAL);
-        l.setPadding(dp(16), dp(16), dp(16), dp(16));
-        l.setShowDividers(LinearLayout.SHOW_DIVIDER_NONE);
-        l.setBackgroundColor(getColor(R.color.keepriva_background));
-        return l;
+        return viewFactory.verticalContainer(gapDp);
     }
 
     private ScrollView wrap(View child) {
-        ScrollView s = new ScrollView(this);
-        s.setFillViewport(true);
-        s.setBackgroundColor(getColor(R.color.keepriva_background));
-        s.addView(child);
-        return s;
+        return viewFactory.scroll(child);
     }
 
     private TextView title(String text) {
-        TextView v = new TextView(this);
-        v.setText(text);
-        v.setTextSize(26);
-        v.setPadding(0, dp(8), 0, dp(12));
-        UiStyle.styleTitle(v);
-        return v;
+        return viewFactory.title(text);
     }
 
     private TextView subtitle(String text) {
-        TextView v = new TextView(this);
-        v.setText(text == null || text.isEmpty() ? "—" : text);
-        v.setTextSize(15);
-        v.setPadding(0, dp(2), 0, dp(10));
-        UiStyle.styleBodyText(v);
-        return v;
+        return viewFactory.subtitle(text);
     }
 
     private TextView boldLabel(String text) {
-        TextView v = new TextView(this);
-        v.setText(text);
-        v.setTextSize(14);
-        v.setPadding(0, dp(8), 0, 0);
-        UiStyle.styleLabel(v);
-        return v;
+        return viewFactory.boldLabel(text);
     }
 
     private void addLabelValue(LinearLayout body, String label, String value) {
@@ -3538,39 +3522,23 @@ public class MainActivity extends Activity {
     }
 
     private EditText field(String hint, String value) {
-        EditText e = new EditText(this);
-        e.setHint(hint);
-        e.setText(value == null ? "" : value);
-        e.setTextSize(16);
-        UiStyle.styleInput(e);
-        LinearLayout.LayoutParams lp = matchWidth();
-        lp.setMargins(0, dp(4), 0, dp(8));
-        e.setLayoutParams(lp);
-        return e;
+        return viewFactory.field(hint, value);
     }
 
     private EditText passwordField(String hint) {
-        EditText e = field(hint, "");
-        e.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        return e;
+        return viewFactory.passwordField(hint);
     }
 
     private Button button(String text) {
-        Button b = new Button(this);
-        b.setText(text);
-        UiStyle.styleSecondaryButton(b);
-        return b;
+        return viewFactory.secondaryButton(text);
     }
 
     private Button primaryButton(String text) {
-        Button b = new Button(this);
-        b.setText(text);
-        UiStyle.stylePrimaryButton(b);
-        return b;
+        return viewFactory.primaryButton(text);
     }
 
     private LinearLayout.LayoutParams matchWidth() {
-        return new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        return viewFactory.matchWidth();
     }
 
     private void dismissDialogThen(AlertDialog dialog, Runnable continuation) {
@@ -3581,6 +3549,10 @@ public class MainActivity extends Activity {
         }
         dialog.setOnDismissListener(ignored -> continuation.run());
         dialog.dismiss();
+    }
+
+    private AlertDialog showDialog(AlertDialog dialog) {
+        return dialogRegistry.show(dialog);
     }
 
     private AlertDialog findShowingDialogForView(View view) {
@@ -3679,7 +3651,7 @@ public class MainActivity extends Activity {
         if (vaultSession.isUnlocked() && getLockOnScreenOff()) lockVault();
     }
 
-    private int dp(int v) { return Math.round(v * getResources().getDisplayMetrics().density); }
+    private int dp(int v) { return viewFactory.dp(v); }
     private void toast(String s) { Toast.makeText(this, s, Toast.LENGTH_LONG).show(); }
     private static String safe(String s) { return s == null ? "" : s; }
 }

@@ -215,6 +215,27 @@ public class Phase2AArchitectureTest {
         assertTrue(SecuritySettingsActions.class.isAssignableFrom(MainActivity.class));
     }
 
+    @Test
+    public void waveC1Browser_usesLifecycleAndNarrowHostContracts() {
+        assertTrue(VaultController.class.isAssignableFrom(LegacyVaultBrowserController.class));
+        assertTrue(LegacyVaultBrowserController.DataSource.class.isAssignableFrom(MainActivity.class));
+        assertTrue(VaultBrowserActions.class.isAssignableFrom(MainActivity.class));
+
+        Arrays.stream(LegacyVaultBrowserController.class.getDeclaredFields()).forEach(field -> {
+            if (Modifier.isStatic(field.getModifiers())) return;
+            assertFalse("Browser controller must not own SecretKey",
+                    SecretKey.class.isAssignableFrom(field.getType()));
+            assertFalse("Browser controller must not own decrypted VaultItem",
+                    VaultItem.class.isAssignableFrom(field.getType()));
+            assertFalse("Browser controller must not own byte arrays",
+                    field.getType().equals(byte[].class));
+            assertFalse("Browser controller must not own Bundle state",
+                    Bundle.class.isAssignableFrom(field.getType()));
+            assertFalse("Browser controller must not own Parcelable state",
+                    Parcelable.class.isAssignableFrom(field.getType()));
+        });
+    }
+
     private static final class FakeDialog implements DialogRegistry.DialogHandle {
         private final String name;
         private final List<String> order;

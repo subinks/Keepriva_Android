@@ -5,6 +5,8 @@ import android.text.InputType;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -102,6 +104,21 @@ final class VaultViewFactory {
         Button button = new Button(context);
         button.setText(text);
         UiStyle.stylePrimaryButton(button);
+        return button;
+    }
+
+    ImageButton smallIconButton(int iconRes, String description, boolean ignoredDanger) {
+        ImageButton button = new ImageButton(context);
+        button.setImageResource(iconRes);
+        button.setContentDescription(description);
+        button.setTooltipText(description);
+        button.setPadding(dp(8), dp(8), dp(8), dp(8));
+        button.setBackground(UiStyle.rounded(
+                context, R.color.keepriva_surface_soft, 18));
+        button.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        button.setClickable(true);
+        button.setFocusable(true);
+        button.setLayoutParams(new LinearLayout.LayoutParams(dp(40), dp(40)));
         return button;
     }
 

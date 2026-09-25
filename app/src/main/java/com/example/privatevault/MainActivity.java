@@ -55,7 +55,9 @@ public class MainActivity extends Activity implements
         UnlockController.Gateway,
         UnlockActions,
         SecuritySettingsController.Gateway,
-        SecuritySettingsActions {
+        SecuritySettingsActions,
+        LegacyVaultBrowserController.DataSource,
+        VaultBrowserActions {
     private static final String PREFS = "vault_config";
     private static final String PREF_HIDDEN_BUILT_IN_CATEGORIES = "hidden_built_in_categories";
     // v1.x legacy configuration keys. Kept for one-time in-place migration.
@@ -90,6 +92,8 @@ public class MainActivity extends Activity implements
     }
 
     private final VaultSessionCoordinator vaultSession = new VaultSessionCoordinator();
+    private final CategoryHierarchyService categoryHierarchy =
+            new CategoryHierarchyService(BUILT_IN_CATEGORIES);
     private final CallbackGeneration callbackGeneration = new CallbackGeneration();
     private final ControllerRegistry controllerRegistry = new ControllerRegistry();
     private final DialogRegistry dialogRegistry = controllerRegistry.register(new DialogRegistry());
@@ -100,13 +104,8 @@ public class MainActivity extends Activity implements
     private SetupController setupController;
     private UnlockController unlockController;
     private SecuritySettingsController securitySettingsController;
+    private LegacyVaultBrowserController browserController;
     private final VaultScreenRouter screenRouter = new VaultScreenRouter();
-    private LinearLayout listContainer;
-    private EditText searchBox;
-    private Spinner categoryFilter;
-    private ScrollView homeScroll;
-    private LinearLayout homeCategoryTree;
-    private final Set<String> expandedHomeCategories = new HashSet<>();
     private String selectedHomeCategory = "All";
     private String pendingNewItemCategory = null;
     private List<VaultItem> allItems = new ArrayList<>();
@@ -148,6 +147,8 @@ public class MainActivity extends Activity implements
         unlockController = controllerRegistry.register(new UnlockController(this, viewFactory, this, this));
         securitySettingsController = controllerRegistry.register(new SecuritySettingsController(
                 this, viewFactory, dialogRegistry, securityPreferences, this, this));
+        browserController = controllerRegistry.register(
+                new LegacyVaultBrowserController(this, viewFactory, this, this));
         database = new VaultDatabase(this);
         clipboardSecurity = new ClipboardSecurityManager(this);
         registerScreenOffReceiver();
@@ -594,108 +595,34 @@ public class MainActivity extends Activity implements
 
     /** Root categories have depth 1. Unknown/broken references fail conservatively at max+1. */
     private int categoryDepth(String categoryName) {
-        String current = safe(categoryName).trim();
-        if (current.isEmpty() || isBuiltInCategory(current)) return 1;
-        Set<String> seen = new HashSet<>();
-        int depth = 1;
-        while (!current.isEmpty()) {
-            if (!seen.add(current.toLowerCase(Locale.ROOT))) {
-                return VaultSecurityPreferences.HARD_MAX_CATEGORY_DEPTH + 1;
-            }
-            CustomCategory c = findCustomCategory(current);
-            if (c == null || safe(c.parentName).trim().isEmpty()) return depth;
-            String parent = safe(c.parentName).trim();
-            depth++;
-            if (isBuiltInCategory(parent)) return depth;
-            current = parent;
-            if (depth > VaultSecurityPreferences.HARD_MAX_CATEGORY_DEPTH + 1) return depth;
-        }
-        return depth;
+        return categoryHierarchy.depth(categoryName, customCategories);
     }
 
     @Override
     public int deepestCategoryDepth() {
-        int deepest = 1;
-        for (CustomCategory c : customCategories) deepest = Math.max(deepest, categoryDepth(c.name));
-        return deepest;
+        return categoryHierarchy.deepestDepth(customCategories);
     }
 
     private String categoryPath(String categoryName) {
-        String leaf = safe(categoryName).trim();
-        if (leaf.isEmpty() || isBuiltInCategory(leaf)) return leaf;
-        List<String> parts = new ArrayList<>();
-        Set<String> seen = new HashSet<>();
-        String current = leaf;
-        while (!current.isEmpty() && seen.add(current.toLowerCase(Locale.ROOT))) {
-            parts.add(current);
-            CustomCategory c = findCustomCategory(current);
-            if (c == null || safe(c.parentName).trim().isEmpty()) break;
-            current = safe(c.parentName).trim();
-            if (isBuiltInCategory(current)) { parts.add(current); break; }
-        }
-        Collections.reverse(parts);
-        return String.join(" / ", parts);
+        return categoryHierarchy.path(categoryName, customCategories);
     }
 
     private boolean isDescendantOf(String candidateName, String ancestorName) {
-        String current = safe(candidateName).trim();
-        String ancestor = safe(ancestorName).trim();
-        Set<String> seen = new HashSet<>();
-        while (!current.isEmpty() && seen.add(current.toLowerCase(Locale.ROOT))) {
-            if (current.equals(ancestor)) return true;
-            CustomCategory c = findCustomCategory(current);
-            if (c == null) return false;
-            current = safe(c.parentName).trim();
-        }
-        return false;
-    }
-
-    private int subtreeRelativeDepth(String categoryName) {
-        int max = 1;
-        for (CustomCategory c : customCategories) {
-            if (isDescendantOf(c.name, categoryName)) {
-                int relative = categoryDepth(c.name) - categoryDepth(categoryName) + 1;
-                max = Math.max(max, relative);
-            }
-        }
-        return max;
+        return categoryHierarchy.isDescendantOf(candidateName, ancestorName, customCategories);
     }
 
     private boolean moveFitsDepth(String categoryName, String newParentName) {
-        int parentDepth = safe(newParentName).trim().isEmpty() ? 0 : categoryDepth(newParentName);
-        int newRootDepth = parentDepth + 1;
-        return newRootDepth + subtreeRelativeDepth(categoryName) - 1 <= getMaxCategoryDepth();
+        return categoryHierarchy.moveFitsDepth(
+                categoryName, newParentName, getMaxCategoryDepth(), customCategories);
+    }
+
+    private int subtreeRelativeDepth(String categoryName) {
+        return categoryHierarchy.subtreeRelativeDepth(categoryName, customCategories);
     }
 
     /** Returns null when valid, otherwise a user-facing hierarchy validation error. */
     private String validateCategoryHierarchy(List<CustomCategory> categories, int maxDepth) {
-        Map<String, String> parents = new LinkedHashMap<>();
-        for (CustomCategory c : categories) {
-            String name = safe(c.name).trim();
-            if (name.isEmpty()) return "A custom category has no name.";
-            String key = name.toLowerCase(Locale.ROOT);
-            if (parents.containsKey(key)) return "Duplicate custom category: " + name;
-            parents.put(key, safe(c.parentName).trim());
-        }
-        for (CustomCategory c : categories) {
-            String current = safe(c.name).trim();
-            Set<String> seen = new HashSet<>();
-            int depth = 1;
-            while (!current.isEmpty()) {
-                String lc = current.toLowerCase(Locale.ROOT);
-                if (!seen.add(lc)) return "Category cycle detected around: " + c.name;
-                String parent = parents.get(lc);
-                if (parent == null || parent.isEmpty()) break;
-                depth++;
-                if (depth > maxDepth) return "Category '" + c.name + "' exceeds the configured maximum depth of " + maxDepth + ".";
-                if (isBuiltInCategory(parent)) break;
-                if (!parents.containsKey(parent.toLowerCase(Locale.ROOT))) {
-                    return "Category '" + c.name + "' references missing parent '" + parent + "'.";
-                }
-                current = parent;
-            }
-        }
-        return null;
+        return categoryHierarchy.validate(categories, maxDepth);
     }
 
     private void showPreferencesDialog() {
@@ -800,12 +727,7 @@ public class MainActivity extends Activity implements
         vaultSession.clear();
         allItems.clear();
         customCategories.clear();
-        listContainer = null;
-        searchBox = null;
-        categoryFilter = null;
-        homeScroll = null;
-        homeCategoryTree = null;
-        expandedHomeCategories.clear();
+        if (browserController != null) browserController.clearSessionState();
         selectedHomeCategory = "All";
         pendingNewItemCategory = null;
         clearPendingExportData();
@@ -854,616 +776,110 @@ public class MainActivity extends Activity implements
         return options.toArray(new CategoryOption[0]);
     }
     private void showVaultScreen() {
-        if (!vaultSession.isUnlocked()) { showUnlockScreen(); return; }
+        if (!vaultSession.isUnlocked()) {
+            showUnlockScreen();
+            return;
+        }
 
         showVaultLoadingState();
-
         try {
             customCategories = database.listCustomCategories(vaultSession.requireKey());
             allItems = database.list(vaultSession.requireKey());
-        } catch (Exception e) {
+        } catch (Exception error) {
             showVaultLoadError();
             return;
         }
 
-        LinearLayout outer = baseVertical(14);
-        outer.setPadding(dp(14), dp(14), dp(14), dp(28));
-
-        // Phase 2 XML-backed toolbar preserves the existing title, subtitle and lock action.
-        View header = VaultUiComponents.toolbar(
-                this,
-                "Keepriva",
-                "Private vault • Offline by design",
-                R.drawable.ic_keepriva_lock,
-                "Lock vault",
-                v -> lockVault());
-        header.setBackground(UiStyle.rounded(this, R.color.keepriva_primary_dark, 16));
-        outer.addView(header, matchWidth());
-
-        // Search sits above the category tree.
-        searchBox = field("Search title, username, phone, website or notes", "");
-        searchBox.setSingleLine(true);
-        LinearLayout.LayoutParams searchParams = matchWidth();
-        searchParams.topMargin = dp(12);
-        outer.addView(searchBox, searchParams);
-
-        // Category tree: this is now the primary navigation instead of a row/grid
-        // of top-level buttons. Parent and child categories are shown one below
-        // another with indentation and entry counts.
-        LinearLayout categoryCard = UiStyle.verticalCard(this, 10);
-
-        LinearLayout categoryHeader = new LinearLayout(this);
-        categoryHeader.setOrientation(LinearLayout.HORIZONTAL);
-        categoryHeader.setGravity(Gravity.CENTER_VERTICAL);
-
-        LinearLayout categoryHeaderText = new LinearLayout(this);
-        categoryHeaderText.setOrientation(LinearLayout.VERTICAL);
-        categoryHeaderText.addView(UiStyle.sectionTitle(this, "Categories"));
-        categoryHeaderText.addView(UiStyle.sectionCaption(
-                this, "Browse your vault by category and subcategory."));
-
-        categoryHeader.addView(categoryHeaderText, new LinearLayout.LayoutParams(
-                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
-
-        Button quickAdd = button("+");
-        quickAdd.setContentDescription("Add entry or subcategory");
-        quickAdd.setTextSize(24);
-        quickAdd.setMinWidth(0);
-        quickAdd.setMinimumWidth(0);
-        quickAdd.setMinHeight(0);
-        quickAdd.setMinimumHeight(0);
-        quickAdd.setTextColor(getColor(android.R.color.white));
-        quickAdd.setBackground(UiStyle.rounded(
-                this, R.color.keepriva_primary, 22));
-        quickAdd.setOnClickListener(this::showCategoryQuickAddMenu);
-
-        LinearLayout.LayoutParams quickAddParams =
-                new LinearLayout.LayoutParams(dp(44), dp(44));
-        quickAddParams.rightMargin = dp(8);
-        categoryHeader.addView(quickAdd, quickAddParams);
-
-        Button manageCategories = button("Manage");
-        manageCategories.setContentDescription("Manage categories");
-        UiStyle.styleCompactButton(manageCategories);
-        manageCategories.setOnClickListener(v -> showCustomCategoriesDialog());
-        categoryHeader.addView(manageCategories);
-
-        categoryCard.addView(categoryHeader, matchWidth());
-
-        homeCategoryTree = new LinearLayout(this);
-        homeCategoryTree.setOrientation(LinearLayout.VERTICAL);
-        categoryCard.addView(homeCategoryTree, matchWidth());
-
-        LinearLayout.LayoutParams categoryParams = matchWidth();
-        categoryParams.topMargin = dp(12);
-        outer.addView(categoryCard, categoryParams);
-
-
-        // Secondary management actions come after the user's actual vault content.
-        LinearLayout toolsCard = UiStyle.verticalCard(this, 10);
-        toolsCard.addView(UiStyle.sectionTitle(this, "Vault tools"));
-        toolsCard.addView(UiStyle.sectionCaption(
-                this, "Transfer, back up, configure and secure Keepriva."));
-
-        toolsCard.addView(homeToolRow(
-                R.drawable.ic_keepriva_import,
-                "Import",
-                "Bulk import credentials from Keepriva JSON",
-                v -> showImportDialog()), matchWidth());
-
-        toolsCard.addView(homeToolRow(
-                R.drawable.ic_keepriva_export,
-                "Export",
-                "Export the currently selected category",
-                v -> exportSelectedCategory()), matchWidth());
-
-        toolsCard.addView(homeToolRow(
-                R.drawable.ic_keepriva_backup,
-                "Backup & Restore",
-                "Encrypted .pvault backup and recovery",
-                v -> showBackupRestoreDialog()), matchWidth());
-
-        toolsCard.addView(homeToolRow(
-                R.drawable.ic_keepriva_settings,
-                "Preferences",
-                "Category nesting and app preferences",
-                v -> showPreferencesDialog()), matchWidth());
-
-        toolsCard.addView(homeToolRow(
-                R.drawable.ic_keepriva_security,
-                "Security",
-                "Master password, biometrics and lock settings",
-                v -> requestMasterPasswordReauth(
-                        "Security settings",
-                        this::showSecuritySettings)), matchWidth());
-
-        LinearLayout.LayoutParams toolsParams = matchWidth();
-        toolsParams.topMargin = dp(16);
-        outer.addView(toolsCard, toolsParams);
-
-        // Hidden logical state holders retained for existing export/filter code.
-        listContainer = new LinearLayout(this);
-        listContainer.setVisibility(View.GONE);
-        outer.addView(listContainer, new LinearLayout.LayoutParams(1, 1));
-
-        categoryFilter = new Spinner(this);
-        categoryFilter.setAdapter(new ArrayAdapter<>(
-                this,
-                android.R.layout.simple_spinner_dropdown_item,
-                getFilterCategories()));
-        categoryFilter.setVisibility(View.GONE);
-        outer.addView(categoryFilter, new LinearLayout.LayoutParams(1, 1));
-
-        searchBox.addTextChangedListener(new SimpleTextWatcher(() -> {
-            applyFilter();
-            rebuildHomeCategoryTree();
-            updateBrowserNavigationState();
-        }));
-        categoryFilter.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            public void onItemSelected(AdapterView<?> p, View v, int pos, long id) { applyFilter(); }
-            public void onNothingSelected(AdapterView<?> p) { }
-        });
-
-        homeScroll = wrap(outer);
-        homeScroll.setOnScrollChangeListener((view, scrollX, scrollY, oldScrollX, oldScrollY) ->
-                updateBrowserNavigationState());
         VaultNavigationState browserState = VaultNavigationState.vaultBrowser(
-                selectedHomeCategory,
-                searchBox.getText().toString(),
-                0);
+                selectedHomeCategory, "", 0);
         screenRouter.reset(browserState);
-        renderRootScreen(homeScroll, browserState);
-        applyFilter();
-        rebuildHomeCategoryTree();
+        renderRootScreen(browserController.createView(), browserState);
     }
 
-    private View homeToolRow(
-            int iconRes,
-            String title,
-            String description,
-            View.OnClickListener action) {
-
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(10), dp(11), dp(8), dp(11));
-        row.setBackground(UiStyle.outlined(
-                this, R.color.keepriva_surface, R.color.keepriva_outline, 12));
-        row.setClickable(true);
-        row.setFocusable(true);
-        row.setOnClickListener(action);
-        row.setContentDescription(title);
-
-        ImageView icon = new ImageView(this);
-        icon.setImageResource(iconRes);
-        icon.setPadding(dp(8), dp(8), dp(8), dp(8));
-        icon.setBackground(UiStyle.rounded(
-                this, R.color.keepriva_surface_soft, 20));
-
-        LinearLayout.LayoutParams iconParams =
-                new LinearLayout.LayoutParams(dp(42), dp(42));
-        iconParams.rightMargin = dp(12);
-        row.addView(icon, iconParams);
-
-        LinearLayout text = new LinearLayout(this);
-        text.setOrientation(LinearLayout.VERTICAL);
-
-        TextView titleView = new TextView(this);
-        titleView.setText(title);
-        titleView.setTextSize(16);
-        titleView.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        titleView.setTextColor(getColor(R.color.keepriva_text_primary));
-        text.addView(titleView);
-
-        TextView descriptionView = new TextView(this);
-        descriptionView.setText(description);
-        descriptionView.setTextSize(13);
-        descriptionView.setTextColor(getColor(R.color.keepriva_text_secondary));
-        text.addView(descriptionView);
-
-        row.addView(text, new LinearLayout.LayoutParams(
-                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
-
-        TextView arrow = new TextView(this);
-        arrow.setText("›");
-        arrow.setTextSize(28);
-        arrow.setTextColor(getColor(R.color.keepriva_text_secondary));
-        arrow.setGravity(Gravity.CENTER);
-        row.addView(arrow, new LinearLayout.LayoutParams(dp(32), dp(40)));
-
-        LinearLayout.LayoutParams lp = matchWidth();
-        lp.setMargins(0, dp(5), 0, dp(5));
-        row.setLayoutParams(lp);
-
-        return row;
-    }
-    private void showCategoryQuickAddMenu(View anchor) {
-        android.widget.PopupMenu menu = new android.widget.PopupMenu(this, anchor);
-        menu.getMenu().add("Entry");
-        menu.getMenu().add("Sub Category");
-        menu.setOnMenuItemClickListener(item -> {
-            String title = String.valueOf(item.getTitle());
-            if ("Entry".equals(title)) {
-                String initial = "All".equals(selectedHomeCategory)
-                        ? "Login"
-                        : selectedHomeCategory;
-                pendingNewItemCategory = initial;
-                showEditDialog(null);
-                return true;
-            }
-            if ("Sub Category".equals(title)) {
-                String parent = "All".equals(selectedHomeCategory)
-                        ? ""
-                        : selectedHomeCategory;
-                showCustomCategoryEditor(null, parent);
-                return true;
-            }
-            return false;
-        });
-        menu.show();
+    @Override
+    public VaultBrowserModel browserModel(String query) {
+        return VaultBrowserModelBuilder.build(
+                query, allItems, customCategories, activeBuiltInCategories());
     }
 
-    private void rebuildHomeCategoryTree() {
-        if (homeCategoryTree == null) return;
-
-        homeCategoryTree.removeAllViews();
-        String query = searchBox == null
-                ? ""
-                : searchBox.getText().toString().trim().toLowerCase(Locale.ROOT);
-
-        if (query.isEmpty()) {
-            addExpandableHomeCategory(
-                    homeCategoryTree, "All", "All categories", 0, true, query);
-        }
-
-        for (String builtIn : activeBuiltInCategories()) {
-            if (query.isEmpty() || categoryBranchMatches(builtIn, query)) {
-                addExpandableHomeCategory(
-                        homeCategoryTree, builtIn, builtIn, 0, false, query);
-            }
-        }
-
-        List<CustomCategory> roots = new ArrayList<>();
-        for (CustomCategory category : customCategories) {
-            if (safe(category.parentName).trim().isEmpty()) roots.add(category);
-        }
-        roots.sort((a, b) -> safe(a.name).compareToIgnoreCase(safe(b.name)));
-
-        for (CustomCategory root : roots) {
-            if (query.isEmpty() || categoryBranchMatches(root.name, query)) {
-                addExpandableHomeCategory(
-                        homeCategoryTree, root.name, root.name, 0, false, query);
-            }
-        }
-
-        if (query.isEmpty() && allItems.isEmpty()) {
-            TextView empty = subtitle(
-                    "No entries yet. Use + to add an entry or subcategory.");
-            empty.setContentDescription("Empty vault");
-            empty.setPadding(dp(8), dp(16), dp(8), dp(16));
-            homeCategoryTree.addView(empty);
-        } else if (!query.isEmpty() && homeCategoryTree.getChildCount() == 0) {
-            TextView empty = subtitle(
-                    "No matching categories, subcategories or entries.");
-            empty.setContentDescription("No tree search results");
-            empty.setPadding(dp(8), dp(16), dp(8), dp(16));
-            homeCategoryTree.addView(empty);
-        }
+    @Override
+    public void onCategorySelected(String categoryName) {
+        selectedHomeCategory = safe(categoryName).isEmpty() ? "All" : categoryName;
     }
 
-    private boolean categoryBranchMatches(String categoryName, String query) {
-        if (query.isEmpty()) return true;
-        if (safe(categoryName).toLowerCase(Locale.ROOT).contains(query)) return true;
+    @Override
+    public void onItemSelected(long itemId) {
+        VaultItem item = findItemById(itemId);
+        if (item != null) showDetails(item);
+    }
 
+    @Override
+    public void onAddEntryRequested(String categoryName) {
+        pendingNewItemCategory = safe(categoryName).isEmpty() ? "Login" : categoryName;
+        showEditDialog(null);
+    }
+
+    @Override
+    public void onAddSubcategoryRequested(String parentCategoryName) {
+        showCustomCategoryEditor(null, safe(parentCategoryName));
+    }
+
+    @Override
+    public void onManageCategoriesRequested() {
+        showCustomCategoriesDialog();
+    }
+
+    @Override
+    public void onImportRequested() {
+        showImportDialog();
+    }
+
+    @Override
+    public void onExportRequested(String categoryName) {
+        selectedHomeCategory = safe(categoryName).isEmpty() ? "All" : categoryName;
+        exportSelectedCategory();
+    }
+
+    @Override
+    public void onBackupRestoreRequested() {
+        showBackupRestoreDialog();
+    }
+
+    @Override
+    public void onPreferencesRequested() {
+        showPreferencesDialog();
+    }
+
+    @Override
+    public void onSecurityRequested() {
+        requestMasterPasswordReauth("Security settings", this::showSecuritySettings);
+    }
+
+    @Override
+    public void onBrowserNavigationChanged(
+            String categoryName, String query, int scrollPosition) {
+        selectedHomeCategory = safe(categoryName).isEmpty() ? "All" : categoryName;
+        VaultNavigationState current = screenRouter.currentState();
+        if (current == null || current.screen() != VaultScreen.VAULT_BROWSER) return;
+        screenRouter.replaceCurrent(VaultNavigationState.vaultBrowser(
+                selectedHomeCategory, safe(query), Math.max(0, scrollPosition)));
+    }
+
+    private VaultItem findItemById(long itemId) {
         for (VaultItem item : allItems) {
-            if (safe(item.category).equalsIgnoreCase(categoryName)
-                    && searchText(item).contains(query)) {
-                return true;
-            }
+            if (item.id == itemId) return item;
         }
-
-        for (CustomCategory child : customCategories) {
-            if (safe(child.parentName).equalsIgnoreCase(categoryName)
-                    && categoryBranchMatches(child.name, query)) {
-                return true;
-            }
-        }
-        return false;
+        return null;
     }
 
-    private void addExpandableHomeCategory(
-            LinearLayout container,
-            String categoryName,
-            String label,
-            int depth,
-            boolean allCategories,
-            String query) {
-
-        String key = safe(categoryName).toLowerCase(Locale.ROOT);
-        boolean searching = !query.isEmpty();
-        boolean expanded = searching || expandedHomeCategories.contains(key);
-
-        LinearLayout indent = new LinearLayout(this);
-        indent.setOrientation(LinearLayout.VERTICAL);
-        indent.setPadding(dp(Math.min(depth, VaultSecurityPreferences.HARD_MAX_CATEGORY_DEPTH) * 20), 0, 0, 0);
-
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(8), dp(10), dp(6), dp(10));
-        row.setBackground(UiStyle.outlined(
-                this, R.color.keepriva_surface, R.color.keepriva_outline, 12));
-        row.setClickable(true);
-        row.setFocusable(true);
-        row.setContentDescription((expanded ? "Close category " : "Open category ") + label);
-
-        ImageView icon = new ImageView(this);
-        icon.setImageResource(categoryIconFor(categoryName, allCategories));
-        icon.setContentDescription("Category icon " + categoryIconFamily(categoryName, allCategories));
-        icon.setPadding(dp(7), dp(7), dp(7), dp(7));
-        icon.setBackground(UiStyle.rounded(
-                this, R.color.keepriva_surface_soft, 20));
-
-        LinearLayout.LayoutParams iconParams =
-                new LinearLayout.LayoutParams(dp(42), dp(42));
-        iconParams.rightMargin = dp(12);
-        row.addView(icon, iconParams);
-
-        LinearLayout text = new LinearLayout(this);
-        text.setOrientation(LinearLayout.VERTICAL);
-
-        TextView nameView = new TextView(this);
-        nameView.setText(label);
-        nameView.setTextSize(depth == 0 ? 16 : 15);
-        nameView.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        nameView.setTextColor(getColor(R.color.keepriva_text_primary));
-        text.addView(nameView);
-
-        int count = allCategories ? allItems.size() : countItemsForCategory(categoryName);
-        TextView countView = new TextView(this);
-        countView.setText((depth == 0 ? "Category" : "Subcategory")
-                + " • " + count + (count == 1 ? " entry" : " entries"));
-        countView.setTextSize(13);
-        countView.setTextColor(getColor(R.color.keepriva_text_secondary));
-        text.addView(countView);
-
-        row.addView(text, new LinearLayout.LayoutParams(
-                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
-
-        TextView arrow = new TextView(this);
-        arrow.setText(expanded ? "⌄" : "›");
-        arrow.setTextSize(26);
-        arrow.setTextColor(getColor(R.color.keepriva_text_secondary));
-        arrow.setGravity(Gravity.CENTER);
-        row.addView(arrow, new LinearLayout.LayoutParams(dp(32), dp(40)));
-
-        row.setOnClickListener(v -> {
-            selectedHomeCategory = allCategories ? "All" : categoryName;
-            selectHomeCategoryByName(selectedHomeCategory);
-            updateBrowserNavigationState();
-
-            if (expandedHomeCategories.contains(key)) {
-                expandedHomeCategories.remove(key);
-            } else {
-                expandedHomeCategories.add(key);
-            }
-
-            rebuildHomeCategoryTree();
-        });
-
-        indent.addView(row, matchWidth());
-        LinearLayout.LayoutParams lp = matchWidth();
-        lp.setMargins(0, dp(4), 0, dp(4));
-        container.addView(indent, lp);
-
-        if (!expanded) return;
-
-        if (allCategories) {
-            for (VaultItem item : allItems) {
-                if (query.isEmpty() || searchText(item).contains(query)) {
-                    addHomeEntryTreeRow(container, item, depth + 1);
-                }
-            }
-            return;
-        }
-
-        List<VaultItem> directItems = new ArrayList<>();
-        for (VaultItem item : allItems) {
-            if (safe(item.category).equalsIgnoreCase(categoryName)
-                    && (query.isEmpty() || searchText(item).contains(query))) {
-                directItems.add(item);
-            }
-        }
-        directItems.sort((a, b) -> safe(a.title).compareToIgnoreCase(safe(b.title)));
-        for (VaultItem item : directItems) {
-            addHomeEntryTreeRow(container, item, depth + 1);
-        }
-
-        List<CustomCategory> children = new ArrayList<>();
-        for (CustomCategory child : customCategories) {
-            if (safe(child.parentName).equalsIgnoreCase(categoryName)) {
-                children.add(child);
-            }
-        }
-        children.sort((a, b) -> safe(a.name).compareToIgnoreCase(safe(b.name)));
-
-        for (CustomCategory child : children) {
-            if (query.isEmpty() || categoryBranchMatches(child.name, query)) {
-                addExpandableHomeCategory(
-                        container,
-                        child.name,
-                        child.name,
-                        depth + 1,
-                        false,
-                        query);
-            }
-        }
-
-        if (directItems.isEmpty() && children.isEmpty() && query.isEmpty()) {
-            TextView empty = subtitle("No entries or subcategories.");
-            empty.setPadding(dp((depth + 1) * 20 + 8), dp(6), dp(8), dp(10));
-            container.addView(empty);
-        }
-    }
-
-    private void addHomeEntryTreeRow(
-            LinearLayout container,
-            VaultItem item,
-            int depth) {
-
-        LinearLayout indent = new LinearLayout(this);
-        indent.setOrientation(LinearLayout.VERTICAL);
-        indent.setPadding(dp(Math.min(depth, VaultSecurityPreferences.HARD_MAX_CATEGORY_DEPTH + 1) * 20), 0, 0, 0);
-
-        LinearLayout card = baseVertical(4);
-        card.setPadding(dp(12), dp(10), dp(12), dp(10));
-        UiStyle.styleCard(card);
-        card.setContentDescription("Open entry " + safe(item.title));
-
-        TextView title = new TextView(this);
-        title.setText(safe(item.title).isEmpty() ? "Untitled" : item.title);
-        title.setTextSize(15);
-        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        title.setTextColor(getColor(R.color.keepriva_text_primary));
-        card.addView(title);
-
-        TextView secondary = new TextView(this);
-        secondary.setText(safe(item.username).isEmpty()
-                ? categoryPath(item.category)
-                : safe(item.username));
-        secondary.setTextSize(13);
-        secondary.setTextColor(getColor(R.color.keepriva_text_secondary));
-        card.addView(secondary);
-
-        card.setOnClickListener(v -> showDetails(item));
-
-        indent.addView(card, matchWidth());
-        LinearLayout.LayoutParams lp = matchWidth();
-        lp.setMargins(0, dp(3), 0, dp(3));
-        container.addView(indent, lp);
-    }
-    private String categoryIconFamily(String categoryName, boolean allCategories) {
-        if (allCategories) return "All";
-        String current = safe(categoryName).trim();
-        Set<String> visited = new HashSet<>();
-        while (!current.isEmpty() && visited.add(current.toLowerCase(Locale.ROOT))) {
-            String lower = current.toLowerCase(Locale.ROOT);
-            if ("login".equals(lower)) return "Login";
-            if ("website".equals(lower)) return "Website";
-            if ("app".equals(lower)) return "App";
-            if ("contact".equals(lower)) return "Contact";
-            if ("banking".equals(lower)) return "Banking";
-            if ("work".equals(lower)) return "Work";
-            if ("personal".equals(lower)) return "Personal";
-            if ("secure note".equals(lower)) return "Secure Note";
-            if ("other".equals(lower)) return "Other";
-            CustomCategory custom = findCustomCategory(current);
-            if (custom == null) break;
-            String parent = safe(custom.parentName).trim();
-            if (parent.isEmpty()) return "Custom";
-            current = parent;
-        }
-        return "Custom";
-    }
-
-    private int categoryIconFor(String categoryName, boolean allCategories) {
-        switch (categoryIconFamily(categoryName, allCategories)) {
-            case "All": return R.drawable.ic_keepriva_folder;
-            case "Login": return R.drawable.ic_keepriva_key;
-            case "Website": return R.drawable.ic_keepriva_website;
-            case "App": return R.drawable.ic_keepriva_app;
-            case "Contact": return R.drawable.ic_keepriva_contact;
-            case "Banking": return R.drawable.ic_keepriva_card;
-            case "Work": return R.drawable.ic_keepriva_work;
-            case "Personal": return R.drawable.ic_keepriva_personal;
-            case "Secure Note": return R.drawable.ic_keepriva_note;
-            case "Other": return R.drawable.ic_keepriva_other;
-            default: return R.drawable.ic_keepriva_custom;
-        }
-    }
-
-    private ImageButton smallIconButton(int iconRes, String description, boolean danger) {
-        ImageButton b = new ImageButton(this);
-        b.setImageResource(iconRes);
-        b.setContentDescription(description);
-        b.setTooltipText(description);
-        b.setPadding(dp(8), dp(8), dp(8), dp(8));
-        b.setBackground(UiStyle.rounded(this, R.color.keepriva_surface_soft, 18));
-        b.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        b.setClickable(true);
-        b.setFocusable(true);
-        b.setLayoutParams(new LinearLayout.LayoutParams(dp(40), dp(40)));
-        return b;
-    }
-    private int countItemsForCategory(String categoryName) {
-        if ("All".equals(categoryName)) return allItems == null ? 0 : allItems.size();
-
-        int count = 0;
-        if (allItems != null) {
-            for (VaultItem item : allItems) {
-                if (isDescendantOf(item.category, categoryName)) count++;
-            }
-        }
-        return count;
-    }
-
-    private void selectHomeCategoryByName(String categoryName) {
-        if (categoryFilter == null || categoryFilter.getAdapter() == null) return;
-
-        for (int i = 0; i < categoryFilter.getAdapter().getCount(); i++) {
-            Object option = categoryFilter.getAdapter().getItem(i);
-            if (option instanceof CategoryOption
-                    && safe(((CategoryOption) option).name).equalsIgnoreCase(safe(categoryName))) {
-                categoryFilter.setSelection(i);
-                return;
-            }
-        }
-    }
     private void loadItems() {
         try {
             allItems = database.list(vaultSession.requireKey());
-            applyFilter();
-            rebuildHomeCategoryTree();
-        } catch (Exception e) {
+            browserController.refresh();
+        } catch (Exception error) {
             toast("Could not decrypt vault. Locking for safety.");
             lockVault();
         }
-    }
-
-    private void applyFilter() {
-        // categoryFilter remains the logical selection used by export code.
-        // Do not render a second hidden item list: the expandable tree is the
-        // single source of truth for visible home content.
-        if (listContainer != null) {
-            listContainer.removeAllViews();
-        }
-    }
-    private String searchText(VaultItem i) {
-        StringBuilder text = new StringBuilder(safe(i.title)).append(' ').append(safe(i.category)).append(' ')
-                .append(safe(i.username)).append(' ').append(safe(i.phone1)).append(' ').append(safe(i.phone2)).append(' ')
-                .append(safe(i.phone3)).append(' ').append(safe(i.website)).append(' ').append(safe(i.websiteUrl)).append(' ').append(safe(i.notes));
-        if (i.customFields != null) for (Map.Entry<String, String> e : i.customFields.entrySet())
-            text.append(' ').append(e.getKey()).append(' ').append(safe(e.getValue()));
-        return text.toString().toLowerCase(Locale.ROOT);
-    }
-
-    private View itemCard(VaultItem item) {
-        LinearLayout card = baseVertical(6);
-        card.setPadding(dp(12), dp(12), dp(12), dp(12));
-        TextView title = new TextView(this);
-        title.setText(item.title.isEmpty() ? "Untitled" : item.title);
-        title.setTextSize(18);
-        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        title.setTextColor(getColor(R.color.keepriva_text_primary));
-        card.addView(title);
-        TextView cat = subtitle(categoryPath(item.category) + (item.username.isEmpty() ? "" : "  •  " + item.username));
-        card.addView(cat);
-        UiStyle.styleCard(card);
-        card.setOnClickListener(v -> showDetails(item));
-        LinearLayout.LayoutParams lp = matchWidth();
-        lp.setMargins(0, dp(5), 0, dp(5));
-        card.setLayoutParams(lp);
-        return card;
     }
 
     private void showDetails(VaultItem item) {
@@ -1786,13 +1202,9 @@ public class MainActivity extends Activity implements
             try {
                 database.save(item, vaultSession.requireKey());
                 d.dismiss();
-                loadItems();
-
                 selectedHomeCategory = item.category;
-                expandedHomeCategories.add(
-                        safe(item.category).toLowerCase(Locale.ROOT));
-                selectHomeCategoryByName(item.category);
-                rebuildHomeCategoryTree();
+                browserController.selectCategory(item.category, true);
+                loadItems();
             } catch (Exception e) {
                 toast("Could not save encrypted item.");
             }
@@ -2071,6 +1483,28 @@ public class MainActivity extends Activity implements
         LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(32), dp(32));
         iconParams.rightMargin = dp(8);
         row.addView(icon, iconParams);
+    }
+
+    private String categoryIconFamily(String categoryName, boolean allCategories) {
+        return allCategories
+                ? "All"
+                : VaultBrowserModelBuilder.iconFamily(categoryName, customCategories);
+    }
+
+    private int categoryIconFor(String categoryName, boolean allCategories) {
+        switch (categoryIconFamily(categoryName, allCategories)) {
+            case "All": return R.drawable.ic_keepriva_folder;
+            case "Login": return R.drawable.ic_keepriva_key;
+            case "Website": return R.drawable.ic_keepriva_website;
+            case "App": return R.drawable.ic_keepriva_app;
+            case "Contact": return R.drawable.ic_keepriva_contact;
+            case "Banking": return R.drawable.ic_keepriva_card;
+            case "Work": return R.drawable.ic_keepriva_work;
+            case "Personal": return R.drawable.ic_keepriva_personal;
+            case "Secure Note": return R.drawable.ic_keepriva_note;
+            case "Other": return R.drawable.ic_keepriva_other;
+            default: return R.drawable.ic_keepriva_custom;
+        }
     }
 
     private void addBuiltInCategoryTreeRow(LinearLayout body, String name) {
@@ -2481,7 +1915,7 @@ public class MainActivity extends Activity implements
     }
 
     private void exportSelectedCategory() {
-        String category = selectedCategoryName(categoryFilter, "All");
+        String category = safe(selectedHomeCategory).isEmpty() ? "All" : selectedHomeCategory;
         List<VaultItem> selected = new ArrayList<>();
         for (VaultItem item : allItems) if ("All".equals(category) || isDescendantOf(item.category, category)) selected.add(item);
         if (selected.isEmpty()) { toast("There are no entries to export in this category."); return; }
@@ -3171,6 +2605,10 @@ public class MainActivity extends Activity implements
         return viewFactory.primaryButton(text);
     }
 
+    private ImageButton smallIconButton(int iconRes, String description, boolean danger) {
+        return viewFactory.smallIconButton(iconRes, description, danger);
+    }
+
     private LinearLayout.LayoutParams matchWidth() {
         return viewFactory.matchWidth();
     }
@@ -3241,18 +2679,6 @@ public class MainActivity extends Activity implements
                 v -> showUnlockScreen());
         error.setContentDescription("Vault loading error");
         renderRootScreen(error, state);
-    }
-
-    private void updateBrowserNavigationState() {
-        VaultNavigationState current = screenRouter.currentState();
-        if (current == null || current.screen() != VaultScreen.VAULT_BROWSER) return;
-
-        String query = searchBox == null ? "" : searchBox.getText().toString();
-        int scrollPosition = homeScroll == null ? 0 : homeScroll.getScrollY();
-        screenRouter.replaceCurrent(VaultNavigationState.vaultBrowser(
-                selectedHomeCategory,
-                query,
-                scrollPosition));
     }
 
     // Package-private diagnostics used by same-package instrumentation tests.

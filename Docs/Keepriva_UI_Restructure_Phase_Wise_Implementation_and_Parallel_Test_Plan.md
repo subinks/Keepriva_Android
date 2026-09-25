@@ -13,6 +13,7 @@ This document defines the sequential implementation plan for the next Keepriva A
 - Backup and restore compatibility for version history.
 - Production tests and instrumentation tests delivered with every phase.
 - Refactoring the GitHub Actions workflow so emulator tests run in isolated logical batches in parallel.
+- A behavior-preserving modularization of `MainActivity` before feature-heavy UI phases begin.
 
 This is an implementation roadmap, not an authorization to change the current green branch. Each phase must be implemented, reviewed, tested, and merged independently.
 
@@ -23,16 +24,17 @@ This is an implementation roadmap, not an authorization to change the current gr
 | Baseline item | Current value |
 |---|---|
 | Repository | `subinks/Keepriva_Android` |
-| Branch | `ui_enhancement` |
-| Green commit | `6851c467896abc3d8d375cfb9f237379adce5708` |
-| Green workflow run | `35973848830` |
-| Workflow wall-clock duration | Approximately 18 minutes 22 seconds |
-| Android instrumentation tests | 89 methods across 9 test classes |
-| Normal blocking tests | 88 |
+| Branch | `ui_eh_ph02_screen_routing` |
+| Green commit | `2212df03ad713e5693bfd8d6b46b7d5ae926b363` |
+| Green workflow run | `36100647077` |
+| Original Phase 0 workflow duration | Approximately 18 minutes 22 seconds |
+| Android instrumentation tests | 95 methods across 9 test classes |
+| Normal blocking tests | 94 |
 | Biometric CI diagnostic | 1 conditional/non-blocking test |
+| JVM router/model tests | 9 |
 | Database version | 3 |
 | Encrypted backup format version | 1 |
-| Application architecture | One `Activity`, programmatically created views and dialogs |
+| Application architecture | One 3,684-line `MainActivity`, Phase 2 router/root infrastructure, mixed programmatic and reusable XML views |
 
 Before starting implementation, create a protected baseline tag from the green commit:
 
@@ -40,13 +42,13 @@ Before starting implementation, create a protected baseline tag from the green c
 ui-enhancement-green-2026-09-24
 ```
 
-All redesign work should begin from a new branch such as:
+Phase 2A must begin from the current green Phase 2 commit on a new branch:
 
 ```text
-ui_restructure_v2
+ui_eh_ph02a_mainactivity_modularization
 ```
 
-Do not continue stacking major redesign patches directly on the established green commit.
+Do not add the Phase 3 browser redesign directly to the monolithic activity. Complete and prove the behavior-preserving Phase 2A extraction first.
 
 ---
 
@@ -64,6 +66,7 @@ Do not continue stacking major redesign patches directly on the established gree
 8. Extend encrypted backup and restore to include history.
 9. Update existing tests and add new tests in the same phase as each production change.
 10. Parallelize emulator verification by logical feature group.
+11. Modularize `MainActivity` into lifecycle/session orchestration, feature controllers, repositories, view-state builders, and reusable UI factories before later UI work.
 
 ### 3.2 Out of scope for this cycle
 
@@ -83,7 +86,9 @@ These decisions prevent repeated design changes during implementation.
 
 ### 4.1 Retain a single activity as the security/session owner
 
-`MainActivity` should continue to own the in-memory `SecretKey`, auto-lock lifecycle, screen protection, and clipboard cleanup.
+`MainActivity` remains the Android lifecycle boundary and the sole owner of the in-memory `SecretKey`. Phase 2A reduces it to a composition root that coordinates the router, root renderer, lock lifecycle, Activity results, and feature controllers.
+
+Feature controllers receive narrow callback interfaces. They must not retain a `SecretKey`, decrypted `VaultItem`, `Activity`, dialog, or view beyond the lifetime of the rendered screen. Database and cryptographic operations are invoked through activity-owned/session-scoped gateways that accept the key only for the duration of a call.
 
 Do not pass the vault key through:
 
@@ -95,21 +100,27 @@ Do not pass the vault key through:
 
 ### 4.2 Introduce an internal screen-navigation layer
 
-Extract the large programmatic UI from `MainActivity` into screen components while keeping one activity:
+Phase 2 introduced the router. Phase 2A extracts event handling and rendering from the large activity while retaining one Android activity:
 
 ```text
 MainActivity
-  VaultScreenRouter
-    VaultBrowserScreen
-    SearchResultsScreen
-    ItemDetailsScreen
-    ItemEditorScreen
-    MoveItemScreen
-    ItemHistoryScreen
-    ItemVersionDetailsScreen
+  MainActivityCompositionRoot
+    VaultScreenRouter
+    VaultSessionCoordinator
+    VaultRootRenderer
+    ActivityResultCoordinator
+    SetupController
+    UnlockController
+    SecuritySettingsController
+    LegacyVaultBrowserController
+    CategoryManagementController
+    ItemDialogController
+    DataTransferController
 ```
 
-`MainActivity` remains responsible for sensitive state and supplies callbacks to the screens. The screen router maintains a small in-memory navigation stack and clears it immediately when the vault locks.
+The `LegacyVaultBrowserController` and `ItemDialogController` are temporary behavior-preserving extractions. Phase 3 replaces the legacy browser controller; Phase 5 replaces item-detail dialogs with the final full-screen controller. This prevents Phase 2A from silently becoming a UI redesign.
+
+`MainActivity` remains responsible for sensitive state and supplies callbacks to controllers. The screen router maintains a small in-memory navigation stack and clears it immediately when the vault locks.
 
 This approach avoids a high-risk, all-at-once migration to multiple activities or a new application framework. Fragments can be considered later, after the UI and security behavior are stable.
 
@@ -178,6 +189,7 @@ The Android Back action must return to the previous screen and restore the prior
 | 0 | Freeze baseline and record measurements | No | No | Preserve 89-test baseline |
 | 1 | Parallel CI/emulator foundation | No | No | Split existing tests into isolated batches |
 | 2 | Screen router and reusable UI foundation | No | No | Navigation and lifecycle tests |
+| 2A | Behavior-preserving `MainActivity` modularization | No | No | Controller contracts, wiring, lifecycle, and full 95-test regression |
 | 3 | Category-first vault browser redesign | No | No | Update home/category/smoke tests |
 | 4 | Separate search-results screen | No | No | New search-results suite |
 | 5 | Full-screen details, timestamps, and copy actions | No | No | New clipboard/details suite |
@@ -187,7 +199,7 @@ The Android Back action must return to the previous screen and restore the prior
 | 9 | Version-aware backup and restore | No | v1 to v2 | Backup compatibility and round-trip tests |
 | 10 | Integration, accessibility, visual verification, release gate | No | No | Full regression and screenshots |
 
-Each phase is a merge boundary. Do not start the next phase until the current phase's exit criteria are green.
+Each phase is a merge boundary. Do not start the next phase until the current phase's exit criteria are green. Phase 2A is a mandatory dependency for every phase from Phase 3 onward.
 
 ---
 
@@ -418,6 +430,170 @@ Update `KeeprivaLifecycleRobustnessTest` and add pure JVM tests for router-state
 
 ---
 
+## Phase 2A - Modularize MainActivity without changing behavior
+
+### Objective
+
+Reduce the 3,684-line `MainActivity` to a small, auditable lifecycle and composition shell before the browser, search, details, move, history, and backup features are expanded. This phase changes source ownership and event routing only. It must not intentionally change visible wording, accessibility identifiers, database content, encryption, backup formats, navigation behavior, or feature behavior.
+
+### Why Phase 2A is required here
+
+Phase 2 provides the stable activity root and router needed for extraction. Phase 3 begins the first large user-visible redesign. Extracting now avoids implementing every later feature inside the monolith and avoids simultaneously debugging structural moves and intentional UX changes.
+
+### Target responsibilities retained by MainActivity
+
+`MainActivity` retains only:
+
+1. Android lifecycle callbacks and receiver registration.
+2. The activity-owned root content container.
+3. Sole ownership of the in-memory `SecretKey`.
+4. Construction and teardown of session-scoped controllers.
+5. Router coordination and screen dispatch.
+6. Activity-result entry points delegated to the transfer coordinator.
+7. Explicit lock, auto-lock, screen-off lock, and destruction cleanup.
+8. Small package-private diagnostics required by lifecycle instrumentation tests.
+
+It must not contain category-tree construction, item-editor construction, export-format selection, backup/restore dialogs, security-settings dialogs, or generic view-factory methods after the corresponding extraction wave completes.
+
+### Target component design
+
+```text
+MainActivity
+  |-- VaultSessionCoordinator
+  |-- VaultRootRenderer
+  |-- VaultScreenRouter
+  |-- ActivityResultCoordinator
+  |-- SetupController
+  |-- UnlockController
+  |-- SecuritySettingsController
+  |-- LegacyVaultBrowserController
+  |-- CategoryManagementController
+  |-- ItemDialogController
+  `-- DataTransferController
+
+Controllers
+  |-- receive immutable view state
+  |-- emit typed callbacks
+  |-- own only current-screen views/dialogs
+  `-- release references on lock or screen replacement
+
+Repositories/gateways
+  |-- contain database operations
+  |-- contain hierarchy/search rules
+  `-- never own Activity views
+```
+
+### Mandatory dependency rules
+
+1. Controllers depend on narrow interfaces, not directly on other controllers.
+2. UI controllers never store `SecretKey` or complete decrypted item collections in static or persisted state.
+3. Adapters continue receiving presentation-only row models.
+4. `Context` references are activity scoped and released by `close()`/`destroy()` methods.
+5. Dialog ownership is centralized so lock and teardown can dismiss every open dialog deterministically.
+6. `VaultDatabase`, crypto managers, backup/import/export managers, and clipboard security remain independent of UI controllers.
+7. Controller callbacks return stable IDs and user intent; the activity/session gateway performs sensitive operations.
+8. No controller uses `Bundle`, `Parcelable`, Java serialization, or saved-instance state for decrypted values.
+9. Phase 2 semantic content descriptions and all existing test selectors remain unchanged.
+10. No new framework, dependency-injection container, fragment migration, or Compose migration is introduced.
+
+### Extraction waves
+
+#### Wave A - Contracts, lifecycle cleanup, and common UI
+
+1. Add controller lifecycle contracts such as `VaultController` and `DismissibleUiOwner`.
+2. Add typed action interfaces for setup, unlock, browser, item, category, security, and transfer events.
+3. Add `VaultRootRenderer` around the Phase 2 root container.
+4. Add `DialogRegistry` that can dismiss and forget every registered dialog on lock/destruction.
+5. Move generic view construction into `VaultViewFactory`/`VaultUiComponents`.
+6. Add architecture tests that prohibit sensitive/persistable controller fields.
+
+For reviewability, Wave A may be split into A1 and A2. A1 establishes key ownership, root rendering, the controller teardown contract/registry, and their JVM tests. A2 adds the dialog registry, typed feature-action contracts, and common view factory before any feature controller is extracted.
+
+#### Wave B - Setup, unlock, session, and security settings
+
+1. Extract setup rendering and validation-event wiring into `SetupController`.
+2. Extract unlock rendering, progress state, and biometric button events into `UnlockController`.
+3. Keep PBKDF2, key unwrap/migration, and key assignment in the activity-owned session coordinator.
+4. Extract preferences, reauthentication, auto-lock, clipboard-timeout, password-change, and biometric-settings dialogs into `SecuritySettingsController`.
+5. Preserve the existing background executor and ensure callbacks are ignored after controller teardown.
+
+#### Wave C - Browser, category management, and item dialogs
+
+1. Move current home/tree rendering unchanged into `LegacyVaultBrowserController`.
+2. Move category path/depth validation into `CategoryHierarchyService` with JVM tests.
+3. Move category-management dialogs and force-delete/move-content event wiring into `CategoryManagementController`.
+4. Move the existing details/editor/delete/Undo dialog workflow into `ItemDialogController`.
+5. Preserve all existing strings, semantic identifiers, category tombstones, selection rules, and dialog-root behavior.
+6. Mark legacy controllers clearly so Phases 3 and 5 replace rather than extend them.
+
+#### Wave D - Import, export, backup, and Activity results
+
+1. Move import/export/template/backup/restore workflow state into a session-scoped `DataTransferController`.
+2. Add `ActivityResultCoordinator` to map existing request codes to typed transfer callbacks.
+3. Keep pending sensitive bytes memory-only and clear them on cancellation, completion, lock, destruction, and timeout.
+4. Preserve all existing document-picker intents, MIME types, suggested filenames, dialog roots, and reauthentication behavior.
+
+#### Wave E - Final wiring and dead-code removal
+
+1. Compose controllers in one place after release-security verification succeeds.
+2. Add one idempotent `clearSessionAndControllers()` path used by every lock/destruction route.
+3. Remove duplicate helpers and forwarding methods after callers have migrated.
+4. Verify `MainActivity` contains no feature-specific dialog construction.
+5. Record final line counts and component ownership in the Phase 2A implementation report.
+
+### Test tasks
+
+Add fast JVM tests for:
+
+- Controller event-to-action mapping.
+- Category hierarchy/path/depth rules.
+- Controller teardown and dialog-registry idempotence.
+- Activity-result request-code dispatch.
+- Controller field-type security rules.
+- No key, decrypted model, `Bundle`, `Parcelable`, or `Serializable` retention.
+
+Add focused instrumentation tests for:
+
+- Setup, unlock, browser, and lock roots after controller extraction.
+- Explicit lock, auto-lock, screen-off lock, and recreation cleanup.
+- Open-dialog dismissal during lock and Activity destruction.
+- Late background-unlock callback suppression after teardown.
+- Import/export/backup Activity-result delegation.
+- Back and router behavior remaining equivalent.
+
+Run all existing 95 instrumentation tests unchanged wherever their semantic behavior is unchanged. Test changes are allowed only for a deliberate ownership/test-hook adjustment, never to weaken an assertion.
+
+### CI placement
+
+- Controller and architecture JVM tests run in `build-apks` through `testDebugUnitTest`.
+- New lifecycle/wiring instrumentation belongs to `auth-lifecycle-smoke`.
+- Existing feature tests remain in their Phase 2 batches.
+- Update explicit expected-count guards in the same commit as any added test.
+- Run the manual serial safety net before declaring Phase 2A complete because extraction can reveal order-dependent leaked state.
+
+### Quantitative exit criteria
+
+- `MainActivity` is reduced from 3,684 lines to at most 1,200 non-generated lines.
+- No feature controller exceeds 700 lines; split larger controllers by workflow.
+- No controller has a static `Activity`, `View`, `Dialog`, `SecretKey`, or decrypted model field.
+- Every controller with UI ownership has an idempotent teardown method.
+- The database remains version 3.
+- The backup format remains version 1.
+- The manifest still has no `INTERNET` permission.
+- All 95 existing instrumentation tests and all nine Phase 2 JVM tests pass before counting new Phase 2A tests.
+- All blocking matrix jobs, visual verification, and the manual serial safety net are green.
+- Setup, unlock, home, category, item, security, import/export, backup/restore, and lock behavior remain visually and semantically equivalent.
+
+### Rollback point
+
+Return to green Phase 2 commit `2212df03ad713e5693bfd8d6b46b7d5ae926b363`. Phase 2A changes no persisted format, so rollback requires no database or backup conversion.
+
+### Downstream contract
+
+Every later phase must replace or extend the appropriate controller, renderer, service, or repository. No later phase may move feature behavior back into `MainActivity`.
+
+---
+
 ## Phase 3 - Redesign the vault browser
 
 ### Objective
@@ -426,21 +602,23 @@ Replace the long expandable tree with a category-first browser inspired by the u
 
 ### Production tasks
 
-1. Add a top toolbar containing:
+1. Replace `LegacyVaultBrowserController` with `VaultBrowserController`; do not reintroduce browser rendering in `MainActivity`.
+2. Add immutable `VaultBrowserViewState` and `VaultBrowserActions` contracts. The controller receives presentation rows and emits category/item IDs and toolbar intents.
+3. Add a top toolbar containing:
    - Current vault/category title.
    - Search.
    - Lock.
    - Overflow menu.
-2. Add a breadcrumb showing the full current category path.
-3. Render direct subcategories in a `Subcategories` section.
-4. Render direct items in an `Items` section.
-5. Use compact rows with semantic category/item icons.
-6. Show item title and full category path; do not expose password or notes.
-7. Add a floating `+` action with `Entry` and `Subcategory` options.
-8. Move import, export, backup, preferences, security, and category management to the overflow menu.
-9. Preserve selected category and scroll position when returning from details.
-10. Preserve category-depth rules and built-in-category tombstones.
-11. Keep empty states for:
+4. Use `CategoryHierarchyService` from Phase 2A to build breadcrumbs and validate direct children.
+5. Render direct subcategories in a `Subcategories` section.
+6. Render direct items in an `Items` section through the stable-ID adapters introduced in Phase 2.
+7. Use compact rows with semantic category/item icons.
+8. Show item title and full category path; do not expose password or notes.
+9. Add a floating `+` action with `Entry` and `Subcategory` options.
+10. Route import, export, backup, preferences, security, and category management overflow intents to the Phase 2A coordinators.
+11. Preserve selected category and scroll position in `VaultNavigationState` when returning from details.
+12. Preserve category-depth rules and built-in-category tombstones.
+13. Keep empty states for:
     - Empty vault.
     - Empty category.
     - Category with subcategories but no direct items.
@@ -488,6 +666,7 @@ Add screenshots for:
 - All previous category CRUD and deletion behavior remains green.
 - The home screen no longer depends on expanding the complete tree.
 - Management tools remain accessible but do not dominate the vault content.
+- `LegacyVaultBrowserController` is removed and `MainActivity` contains no browser-specific rendering code.
 
 ---
 
@@ -499,9 +678,11 @@ Move search results out of the category hierarchy into a separate compact list.
 
 ### Production tasks
 
-1. Search toolbar action opens `SearchResultsScreen`.
-2. Add a focused search input and clear-query action.
-3. Reuse the current search fields:
+1. Add `SearchResultsController`, `SearchResultsViewState`, and `SearchResultsActions`; `MainActivity` only routes to the controller.
+2. Extract matching/normalization into `VaultSearchService` with no Android view dependencies.
+3. Search toolbar action navigates to the explicit `SEARCH_RESULTS` route.
+4. Add a focused search input and clear-query action.
+5. Reuse the current search fields:
    - Title.
    - Category.
    - Username/email.
@@ -510,18 +691,18 @@ Move search results out of the category hierarchy into a separate compact list.
    - Website URL.
    - Notes.
    - Custom-field names and values.
-4. Continue excluding passwords from search indexing.
-5. Return only matching items, not category branches.
-6. Each row displays only:
+6. Continue excluding passwords from search indexing.
+7. Return only matching items, not category branches.
+8. Each row displays only:
    - Item icon.
    - Item title.
    - Full category path.
-7. Do not show sensitive snippets explaining why an item matched.
-8. Sort results deterministically: normalized title, then category path, then item ID.
-9. Add result count, empty query, and no-results states.
-10. Opening a result navigates to full-screen item details.
-11. Back restores the prior query and result-list position.
-12. Debounce filtering only if measurement shows it is needed; do not introduce arbitrary test sleeps.
+9. Do not show sensitive snippets explaining why an item matched.
+10. Sort results deterministically: normalized title, then category path, then item ID.
+11. Add result count, empty query, and no-results states.
+12. Opening a result navigates to full-screen item details through the router.
+13. Back restores the prior query and result-list position from in-memory navigation state.
+14. Debounce filtering only if measurement shows it is needed; do not introduce arbitrary test sleeps.
 
 ### Test tasks
 
@@ -564,6 +745,7 @@ KeeprivaSearchResultsTest
 - Result rows contain item title and category path.
 - Search does not reveal password or sensitive snippets.
 - Search logic has fast JVM coverage and focused UI coverage.
+- Search logic and rendering remain outside `MainActivity`.
 
 ---
 
@@ -575,14 +757,15 @@ Replace the item-details dialog with a professional full-screen view and add sec
 
 ### Production tasks
 
-1. Create `ItemDetailsScreen` with:
+1. Replace the Phase 2A `ItemDialogController` details path with `ItemDetailsController`, `ItemDetailsViewState`, and `ItemDetailsActions`.
+2. Create a full-screen item-details view with:
    - Back navigation.
    - Item title.
    - Edit action.
    - Overflow actions for move, export, and delete.
-2. Render reusable field rows for every non-empty value.
-3. Keep passwords masked initially with separate reveal/hide and copy controls.
-4. Add copy actions for:
+3. Render reusable field rows for every non-empty value.
+4. Keep passwords masked initially with separate reveal/hide and copy controls.
+5. Add copy actions for:
    - Category path.
    - Username/email.
    - Password.
@@ -593,12 +776,12 @@ Replace the item-details dialog with a professional full-screen view and add sec
    - Every custom field.
    - Created timestamp.
    - Modified timestamp.
-5. Route every copy operation through `ClipboardSecurityManager.copySensitive()`.
-6. Respect the configured clipboard-clear timeout.
-7. Show a short confirmation including the timeout, without repeating the copied value.
-8. Display `createdAt` and `updatedAt` using locale-aware date/time formatting.
-9. Preserve existing sensitive custom-field masking.
-10. Ensure locking or leaving the vault clears Keepriva-owned clipboard content according to current security rules.
+6. Emit copy intents through `ItemDetailsActions`; the session-owned clipboard gateway invokes `ClipboardSecurityManager.copySensitive()`.
+7. Respect the configured clipboard-clear timeout.
+8. Show a short confirmation including the timeout, without repeating the copied value.
+9. Format `createdAt` and `updatedAt` through a testable formatter before creating view state.
+10. Preserve existing sensitive custom-field masking.
+11. Ensure locking or leaving the vault clears Keepriva-owned clipboard content according to current security rules.
 
 ### Test tasks
 
@@ -643,6 +826,7 @@ Keep core CRUD in `item-core-search`.
 - Every displayed value has a deterministic secure copy action.
 - Created and modified timestamps are visible and correct.
 - No raw secret appears in toast text, logcat, or accessibility descriptions.
+- The old details branch is removed from `ItemDialogController`; details behavior is not moved into `MainActivity`.
 
 ---
 
@@ -654,18 +838,19 @@ Provide a clear Move action independent of full item editing.
 
 ### Production tasks
 
-1. Add `Move item` to item-details actions.
-2. Create a hierarchical destination selector showing full category paths.
-3. Mark the current category and disable a no-op move.
-4. Exclude hidden/deleted built-in categories.
-5. Validate the destination at commit time, not only when the selector opens.
-6. Update only the item's category.
-7. Preserve item ID, creation time, and all other values.
-8. Update modification time.
-9. Perform the operation transactionally.
-10. Return to item details and display the new category path.
-11. When returning to the browser, open the destination category.
-12. Add a confirmation only if needed for clarity; moving itself is reversible through the later version-history feature.
+1. Add `Move item` to `ItemDetailsActions` and route to `MOVE_ITEM`.
+2. Add `ItemMoveController`, `ItemMoveViewState`, and `ItemMoveActions`.
+3. Use `CategoryHierarchyService` to create a hierarchical destination list with full category paths.
+4. Mark the current category and disable a no-op move.
+5. Exclude hidden/deleted built-in categories.
+6. Validate the destination again in `ItemRepository.moveItem()` at commit time.
+7. Update only the item's category.
+8. Preserve item ID, creation time, and all other values.
+9. Update modification time.
+10. Perform the operation transactionally.
+11. Return through the router to item details and display the new category path.
+12. When returning to the browser, open the destination category.
+13. Add a confirmation only if needed for clarity; moving itself is reversible through the later version-history feature.
 
 ### Test tasks
 
@@ -695,6 +880,7 @@ Add `KeeprivaItemMoveTest` to `item-actions`.
 - Item movement is discoverable without editing all fields.
 - Moves are atomic and preserve item data.
 - The browser and search results immediately reflect the new path.
+- Move UI and persistence are isolated from `MainActivity` behind controller/repository contracts.
 
 ---
 
@@ -739,7 +925,7 @@ Do not store field values or field-change details in plaintext metadata.
 1. Add the explicit sequential `migrate3To4()` path.
 2. Update schema verification to require the history table and indexes.
 3. Add `VaultItemVersion` model.
-4. Extract item persistence/history operations behind focused repository methods.
+4. Extend the Phase 2A repository boundary with `ItemRepository` and `ItemVersionRepository`; no migration or snapshot SQL belongs in an Activity or UI controller.
 5. When an existing item changes:
    - Read the current item.
    - Compare normalized values.
@@ -793,6 +979,7 @@ This batch must remain separate from ordinary UI tests so schema/migration failu
 - No-op saves create no history noise.
 - History retention is deterministic.
 - All encrypted data remains unreadable without the vault key.
+- Version persistence is testable independently of screen controllers and `MainActivity` remains schema unaware.
 
 ---
 
@@ -804,27 +991,28 @@ Expose item history without weakening password masking or clipboard security.
 
 ### Production tasks
 
-1. Add a `Previous versions` section to item details.
-2. Show versions newest first with:
+1. Extend `ItemDetailsController` with a non-sensitive version summary section.
+2. Add `ItemHistoryController`, `ItemVersionDetailsController`, immutable view states, and typed action interfaces.
+3. Show versions newest first with:
    - Date and time.
    - Change reason.
    - Changed field names.
-3. Show a clear no-history state.
-4. Open a dedicated read-only `ItemVersionDetailsScreen`.
-5. Display the complete historical snapshot using the same field-row component as current details.
-6. Keep historical passwords and sensitive custom fields masked initially.
-7. Reuse secure copy actions and timeout behavior.
-8. Add `Restore this version`.
-9. Before restoring:
+4. Show a clear no-history state.
+5. Navigate to a dedicated read-only version-details route.
+6. Display the complete historical snapshot using the same field-row component as current details.
+7. Keep historical passwords and sensitive custom fields masked initially.
+8. Reuse the session-owned secure-copy gateway and timeout behavior.
+9. Add `Restore this version`.
+10. Before restoring:
    - Confirm the action.
    - Verify the target item still exists.
    - Validate the historical category still exists.
-10. If the historical category no longer exists, require a valid replacement category rather than creating an orphaned reference.
-11. Restore all historical values while preserving current item ID and original creation date.
-12. Snapshot the current item before restoration.
-13. Set the restored current item's modification time to now.
-14. Add `Remove this version` with confirmation.
-15. Removing a historical version must not change the current item.
+11. If the historical category no longer exists, route through the existing move/destination component rather than duplicating category-selection logic.
+12. Restore all historical values through `ItemVersionRepository` while preserving current item ID and original creation date.
+13. Snapshot the current item before restoration.
+14. Set the restored current item's modification time to now.
+15. Add `Remove this version` with confirmation.
+16. Removing a historical version must not change the current item.
 
 ### Test tasks
 
@@ -864,6 +1052,7 @@ Add `KeeprivaItemHistoryTest` to `history-storage`, unless runtime measurement r
 - Historical data is inspectable without exposing secrets by default.
 - Restore and remove actions are transactional and independently tested.
 - Missing-category restoration cannot create invalid data.
+- History controllers release decrypted historical view state on Back, lock, replacement, and destruction.
 
 ---
 
@@ -875,21 +1064,22 @@ Ensure encrypted backups preserve history while remaining backward compatible.
 
 ### Production tasks
 
-1. Increase encrypted backup format from 1 to 2.
-2. Add item-history records to the encrypted backup payload.
-3. Keep the entire logical payload encrypted under the backup-password-derived key.
-4. Update restore validation for:
+1. Extend the Phase 2A `DataTransferController`; do not add backup dialogs or pending buffers back to `MainActivity`.
+2. Increase encrypted backup format from 1 to 2.
+3. Add item-history records to the encrypted backup payload.
+4. Keep the entire logical payload encrypted under the backup-password-derived key.
+5. Update restore validation for:
    - History item references.
    - Duplicate version IDs/numbers.
    - Invalid timestamps.
    - Invalid or oversized history arrays.
-5. Restore categories, current items, and history in one transaction.
-6. Continue accepting format-v1 backups.
-7. Treat v1 backups as current-state-only backups with empty history.
-8. Reject unsupported future backup versions with a clear message.
-9. Include history only in encrypted `.pvault` backups.
-10. Keep TXT, HTML, PDF, and ordinary JSON exports current-state-only.
-11. Document that plaintext/export formats intentionally exclude old credentials.
+6. Restore categories, current items, and history through repository transactions.
+7. Continue accepting format-v1 backups.
+8. Treat v1 backups as current-state-only backups with empty history.
+9. Reject unsupported future backup versions with a clear message.
+10. Include history only in encrypted `.pvault` backups.
+11. Keep TXT, HTML, PDF, and ordinary JSON exports current-state-only.
+12. Document that plaintext/export formats intentionally exclude old credentials.
 
 ### Test tasks
 
@@ -929,6 +1119,7 @@ If this batch becomes more than 30 percent slower than the median, split it into
 - Old encrypted backups remain compatible.
 - Plaintext exports never include history.
 - Invalid restores never partially replace the vault.
+- Pending transfer secrets remain owned and cleared by `DataTransferController`, including every Activity-result exit path.
 
 ---
 
@@ -942,13 +1133,15 @@ Verify the redesigned application as one coherent product and eliminate obsolete
 
 1. Remove obsolete expandable-tree rendering and hidden list-container compatibility code.
 2. Remove obsolete item-details dialog code.
-3. Remove temporary adapters/helpers replaced by screen components.
-4. Review typography, spacing, icons, touch targets, empty states, and error states.
-5. Verify small phone, Pixel 6, landscape, and large-font behavior.
-6. Verify all screens remain protected from screenshots in real non-CI builds.
-7. Confirm the manifest still has no `INTERNET` permission.
-8. Review log statements and error messages for secret leakage.
-9. Update user documentation and release notes.
+3. Remove `LegacyVaultBrowserController`, the legacy item-dialog paths, and temporary compatibility callbacks.
+4. Remove temporary adapters/helpers replaced by final screen components.
+5. Run architecture checks proving that `MainActivity` is still a thin composition/lifecycle shell and no controller violates the Phase 2A sensitive-field rules.
+6. Review typography, spacing, icons, touch targets, empty states, and error states.
+7. Verify small phone, Pixel 6, landscape, and large-font behavior.
+8. Verify all screens remain protected from screenshots in real non-CI builds.
+9. Confirm the manifest still has no `INTERNET` permission.
+10. Review log statements and error messages for secret leakage.
+11. Update user documentation and release notes.
 
 ### Test tasks
 
@@ -979,6 +1172,7 @@ Verify the redesigned application as one coherent product and eliminate obsolete
 - Screenshot/UI hierarchy verification passes.
 - Backup compatibility and database migration gates pass.
 - No release build security behavior was weakened for testing.
+- `MainActivity` remains within the Phase 2A responsibility boundary and contains no feature-specific UI construction.
 - The branch is ready for review and merge.
 
 ---
@@ -998,6 +1192,8 @@ After all phases, use the following normal push/PR matrix.
 | `security` | `KeeprivaSecuritySettingsTest` | Reauthentication, auto-lock, clipboard policy, password, biometric settings |
 
 `KeeprivaBiometricCiTest` remains in the non-blocking visual/biometric diagnostic job.
+
+The green Phase 2 starting counts are `auth-lifecycle-smoke=32`, `categories=24`, `item-core=14`, `data-transfer=12`, and `security=12`, for 94 blocking tests. Phase 2A and every later phase must update the relevant explicit batch guard in the same commit that adds tests. The diagnostic test remains outside the blocking total.
 
 ### Why classes are grouped this way
 
@@ -1196,6 +1392,8 @@ Responsibilities:
 9. Record test count and duration.
 10. Capture process state, screenshot, UI dump, and filtered logcat on failure.
 11. Never print vault passwords or other secrets.
+12. Keep an explicit expected count for every batch and update it atomically with test additions/removals.
+13. Validate that the sum of blocking batch counts equals the complete blocking inventory.
 
 ### `scripts/ci/run-visual-verification.sh`
 
@@ -1238,24 +1436,29 @@ where ShellCheck is available in CI.
 14. Every database mutation test verifies both success and rollback behavior.
 15. Migration tests must use real older-schema fixture databases, not only mocked version numbers.
 16. Backup compatibility tests must keep sanitized v1 and v2 fixture files under test resources.
+17. Controller tests use fake action interfaces and immutable view state; they must not require an emulator when Android rendering is not under test.
+18. Architecture tests reject static Activity/View/Dialog fields and `SecretKey`/decrypted-model fields in controllers.
+19. A controller teardown test is mandatory when the controller owns views, dialogs, callbacks, executors, or pending sensitive buffers.
+20. Refactoring tests preserve semantic behavior; moving code is not a reason to weaken assertions or replace deterministic waits with sleeps.
 
 ---
 
 ## 12. Branch and commit strategy
 
-Use one short-lived branch per phase, based on the latest green point of `ui_restructure_v2`:
+Use one short-lived branch per phase, based on the latest green phase point:
 
 ```text
-phase-01-parallel-ci
-phase-02-screen-router
-phase-03-vault-browser
-phase-04-search-results
-phase-05-item-details-copy
-phase-06-move-item
-phase-07-version-storage
-phase-08-version-ui
-phase-09-versioned-backup
-phase-10-final-integration
+ui_eh_ph01_parallel_ci
+ui_eh_ph02_screen_routing
+ui_eh_ph02a_mainactivity_modularization
+ui_eh_ph03_vault_browser
+ui_eh_ph04_search_results
+ui_eh_ph05_item_details_copy
+ui_eh_ph06_move_item
+ui_eh_ph07_version_storage
+ui_eh_ph08_version_ui
+ui_eh_ph09_versioned_backup
+ui_eh_ph10_final_integration
 ```
 
 Recommended commit ordering within each phase:
@@ -1265,6 +1468,8 @@ Recommended commit ordering within each phase:
 3. Existing-test migration.
 4. Workflow/screenshot changes if needed.
 5. Documentation and cleanup.
+
+For Phase 2A, use one commit per extraction wave and require a green build after each wave. Do not combine all source moves into one unreviewable commit.
 
 Do not mix unrelated security, branding, or release-signing changes into these phase branches.
 
@@ -1287,6 +1492,8 @@ Before merging any phase, confirm:
 - [ ] All other batches pass, proving no regression.
 - [ ] Visual artifacts are updated only when the intended UI changed.
 - [ ] The serial safety-net run passes before a major milestone/release.
+- [ ] Feature code was added to the owning controller/service/repository rather than `MainActivity`.
+- [ ] Controller teardown releases dialogs, views, callbacks, and pending sensitive buffers.
 
 ---
 
@@ -1310,11 +1517,13 @@ The redesign is complete only when all of the following are true:
 14. The full serial safety-net suite passes.
 15. Visual verification covers every new primary screen.
 16. Release screenshot protection, auto-lock, clipboard cleanup, and offline-only behavior remain intact.
+17. `MainActivity` remains the small lifecycle/composition shell established by Phase 2A.
+18. Feature controllers obey sensitive-state and teardown contracts.
 
 ---
 
 ## 15. Recommended first action when development resumes
 
-Start with **Phase 1: Parallel CI foundation** before changing the UI. It shortens the feedback loop for every later phase and establishes clean diagnostic boundaries before the test suite expands.
+Phases 0, 1, and 2 are complete and green. The next action is **Phase 2A: MainActivity modularization** from commit `2212df03ad713e5693bfd8d6b46b7d5ae926b363` on `ui_eh_ph02a_mainactivity_modularization`.
 
-After Phase 1 is proven green, proceed strictly in the documented order. In particular, do not build the version-history UI before the v3-to-v4 migration, encrypted snapshot logic, rollback behavior, and retention tests are complete.
+Proceed through the five Phase 2A extraction waves with a green build after each wave. Start Phase 3 only after the complete 95-test Phase 2 regression, added Phase 2A tests, visual verification, and the manual serial safety net are green. In particular, do not build the version-history UI before the v3-to-v4 migration, encrypted snapshot logic, rollback behavior, and retention tests are complete.

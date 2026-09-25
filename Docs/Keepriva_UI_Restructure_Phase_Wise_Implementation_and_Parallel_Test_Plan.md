@@ -25,8 +25,8 @@ This is an implementation roadmap, not an authorization to change the current gr
 |---|---|
 | Repository | `subinks/Keepriva_Android` |
 | Branch | `ui_eh_ph02_screen_routing` |
-| Green commit | `2212df03ad713e5693bfd8d6b46b7d5ae926b363` |
-| Green workflow run | `36100647077` |
+| Phase 2 code baseline commit | `2212df03ad713e5693bfd8d6b46b7d5ae926b363` |
+| Phase 2 green workflow run | `36100647077` |
 | Original Phase 0 workflow duration | Approximately 18 minutes 22 seconds |
 | Android instrumentation tests | 95 methods across 9 test classes |
 | Normal blocking tests | 94 |
@@ -36,13 +36,15 @@ This is an implementation roadmap, not an authorization to change the current gr
 | Encrypted backup format version | 1 |
 | Application architecture | One 3,684-line `MainActivity`, Phase 2 router/root infrastructure, mixed programmatic and reusable XML views |
 
-Before starting implementation, create a protected baseline tag from the green commit:
+After the corrected planning documents pass the unchanged Phase 2 workflow, create a distinct Phase 2 baseline tag from the latest green head of `ui_eh_ph02_screen_routing`:
 
 ```text
-ui-enhancement-green-2026-09-24
+ui-enhancement-phase2-green-2026-09-25
 ```
 
-Phase 2A must begin from the current green Phase 2 commit on a new branch:
+Do not move or reuse the existing Phase 0 tag `ui-enhancement-green-2026-09-24`.
+
+Phase 2A must begin from that latest green Phase 2 branch head, including these planning documents, on a new branch:
 
 ```text
 ui_eh_ph02a_mainactivity_modularization
@@ -84,9 +86,9 @@ Do not add the Phase 3 browser redesign directly to the monolithic activity. Com
 
 These decisions prevent repeated design changes during implementation.
 
-### 4.1 Retain a single activity as the security/session owner
+### 4.1 Retain a single activity as the lifecycle/session boundary
 
-`MainActivity` remains the Android lifecycle boundary and the sole owner of the in-memory `SecretKey`. Phase 2A reduces it to a composition root that coordinates the router, root renderer, lock lifecycle, Activity results, and feature controllers.
+`MainActivity` remains the Android lifecycle boundary and composition root. Its activity-scoped `VaultSessionCoordinator` is the sole in-memory owner of the active `SecretKey`; `MainActivity` must not retain a second key field. Phase 2A reduces the activity to coordination of the session lifecycle, router, root renderer, lock lifecycle, Activity results, and feature controllers.
 
 Feature controllers receive narrow callback interfaces. They must not retain a `SecretKey`, decrypted `VaultItem`, `Activity`, dialog, or view beyond the lifetime of the rendered screen. Database and cryptographic operations are invoked through activity-owned/session-scoped gateways that accept the key only for the duration of a call.
 
@@ -446,8 +448,8 @@ Phase 2 provides the stable activity root and router needed for extraction. Phas
 
 1. Android lifecycle callbacks and receiver registration.
 2. The activity-owned root content container.
-3. Sole ownership of the in-memory `SecretKey`.
-4. Construction and teardown of session-scoped controllers.
+3. Construction and teardown of the activity-scoped `VaultSessionCoordinator`, which solely owns the in-memory `SecretKey`.
+4. Construction and teardown of session-scoped feature controllers.
 5. Router coordination and screen dispatch.
 6. Activity-result entry points delegated to the transfer coordinator.
 7. Explicit lock, auto-lock, screen-off lock, and destruction cleanup.
@@ -586,7 +588,7 @@ Run all existing 95 instrumentation tests unchanged wherever their semantic beha
 
 ### Rollback point
 
-Return to green Phase 2 commit `2212df03ad713e5693bfd8d6b46b7d5ae926b363`. Phase 2A changes no persisted format, so rollback requires no database or backup conversion.
+Return to the Phase 2 baseline tag created from the latest green `ui_eh_ph02_screen_routing` head. The underlying Phase 2 code baseline is `2212df03ad713e5693bfd8d6b46b7d5ae926b363`. Phase 2A changes no persisted format, so rollback requires no database or backup conversion.
 
 ### Downstream contract
 
@@ -1524,6 +1526,6 @@ The redesign is complete only when all of the following are true:
 
 ## 15. Recommended first action when development resumes
 
-Phases 0, 1, and 2 are complete and green. The next action is **Phase 2A: MainActivity modularization** from commit `2212df03ad713e5693bfd8d6b46b7d5ae926b363` on `ui_eh_ph02a_mainactivity_modularization`.
+Phases 0, 1, and 2 are complete and green. After this corrected plan passes the unchanged workflow, create `ui_eh_ph02a_mainactivity_modularization` from the latest green head of `ui_eh_ph02_screen_routing`, not directly from the older code-only commit.
 
 Proceed through the five Phase 2A extraction waves with a green build after each wave. Start Phase 3 only after the complete 95-test Phase 2 regression, added Phase 2A tests, visual verification, and the manual serial safety net are green. In particular, do not build the version-history UI before the v3-to-v4 migration, encrypted snapshot logic, rollback behavior, and retention tests are complete.

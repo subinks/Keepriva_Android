@@ -1,50 +1,33 @@
-# Keepriva Phase 2A package - execution order
+# Keepriva Phase 2A Wave A1 execution guide
 
-This package deliberately separates documentation approval from production-source extraction. Do not run all scripts on the existing Phase 2 branch.
+The planning documents were installed manually and committed separately. Script 37 and the documentation payload are obsolete and must not be retained.
 
-## Part 1 - update and commit the plan on the green Phase 2 branch
+## Files retained in `Docs/ph_02A`
 
-1. Check out `ui_eh_ph02_screen_routing`.
-2. Confirm the working tree contains no unrelated changes.
-3. Extract this package into the repository root, preserving the `Docs` folder.
-4. Run:
+- `PHASE_02A_MAINACTIVITY_MODULARIZATION_ANALYSIS_DESIGN_AND_IMPLEMENTATION_PLAN.md`
+- `README_PHASE_02A_PACKAGE.md`
+- `38-validate-phase-02a-implementation-readiness.ps1`
+- `39-implement-phase-02a-wave-a-architecture-seams.ps1`
+- `wave_a_payload.sha256`
+- `wave_a_payload/` and its six Java files
 
-   ```powershell
-   .\Docs\ph_02A\37-update-master-plan-for-phase-02a.ps1
-   ```
+## Files removed
 
-5. Review `git status --short` and `git diff --check`.
-6. Commit and push the revised master Markdown, revised master PDF, standalone Phase 2A plan, scripts, and payloads.
-7. Let the unchanged Phase 2 workflow finish green.
+- `37-update-master-plan-for-phase-02a.ps1`
+- `payload.sha256`
+- the documentation `payload/` directory
 
-## Part 2 - create the implementation branch
+## Execution sequence
 
-Create `ui_eh_ph02a_mainactivity_modularization` from the green documentation commit, check it out, and run:
+1. Commit the retained support files on `ui_eh_ph02_screen_routing` and wait for its unchanged workflow to pass.
+2. Create `ui_eh_ph02a_mainactivity_modularization` from the latest green head of `ui_eh_ph02_screen_routing`.
+3. Ensure `git status --short` is empty.
+4. Run `38-validate-phase-02a-implementation-readiness.ps1` from the repository root.
+5. Run `39-implement-phase-02a-wave-a-architecture-seams.ps1` from the repository root.
+6. Run `gradlew.bat testDebugUnitTest`.
+7. Run `gradlew.bat assembleDebug assembleDebugAndroidTest`.
+8. Review `git status --short`, `git diff --check`, and the source diff.
+9. Commit and push Wave A1, then wait for every blocking CI job to pass before designing Wave A2.
 
-```powershell
-.\Docs\ph_02A\38-validate-phase-02a-implementation-readiness.ps1
-```
+Wave A1 changes only key ownership, root rendering, controller teardown foundations, and five JVM tests. It intentionally does not implement the complete Phase 2A refactor in one patch.
 
-The validator is read-only. It confirms the exact analyzed `MainActivity`, the 95 instrumentation plus nine JVM baseline, database version 3, backup format 1, offline manifest, and CI batch guards.
-
-## Part 3 - apply only Wave A1
-
-On the clean Phase 2A implementation branch, run:
-
-```powershell
-.\Docs\ph_02A\39-implement-phase-02a-wave-a-architecture-seams.ps1
-```
-
-Wave A1 makes these behavior-preserving changes:
-
-- transfers the active-key reference from `MainActivity` to `VaultSessionCoordinator`;
-- transfers root-child replacement to `VaultRootRenderer`;
-- introduces the `VaultController` teardown contract and reverse-order `ControllerRegistry`;
-- adds five JVM tests for locked-key access, unlock/clear behavior, reverse teardown, idempotence, and teardown after a controller failure;
-- leaves all 95 instrumentation tests and their CI batch counts unchanged.
-
-Run `gradlew.bat testDebugUnitTest`, commit Wave A1 separately, push it, and wait for the full parallel workflow. Wave A2 must be generated from that green commit before any feature controller is extracted. This is intentional: a 3,684-line security-sensitive Activity should be extracted behind proven seams, not replaced in one unreviewable patch.
-
-## What is not included yet
-
-Wave A2 and Waves B-E are designed in the standalone Phase 2A plan but are not bundled as speculative source replacements. Each later installer must use the green result of the previous wave as its exact source precondition. This prevents a later payload from silently overwriting CI corrections made during an earlier wave.

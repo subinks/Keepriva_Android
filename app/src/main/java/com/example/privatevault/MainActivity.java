@@ -96,9 +96,9 @@ public class MainActivity extends Activity {
         @Override public String toString() { return label; }
     }
 
-    private SecretKey sessionKey;
+    private final VaultSessionCoordinator vaultSession = new VaultSessionCoordinator();
     private VaultDatabase database;
-    private FrameLayout rootContent;
+    private VaultRootRenderer rootRenderer;
     private final VaultScreenRouter screenRouter = new VaultScreenRouter();
     private LinearLayout listContainer;
     private EditText searchBox;
@@ -132,9 +132,10 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         ScreenSecurityManager.protect(this);
-        rootContent = new FrameLayout(this);
+        FrameLayout rootContent = new FrameLayout(this);
         rootContent.setContentDescription("Keepriva root content");
         setContentView(rootContent);
+        rootRenderer = new VaultRootRenderer(rootContent);
         ReleaseSecurityManager.Result releaseSecurity = ReleaseSecurityManager.verify(this);
         if (!releaseSecurity.ok) {
             showReleaseSecurityBlock(releaseSecurity.message);
@@ -163,13 +164,13 @@ public class MainActivity extends Activity {
     @Override
     protected void onStop() {
         super.onStop();
-        if (sessionKey != null) backgroundAt = System.currentTimeMillis();
+        if (vaultSession.isUnlocked()) backgroundAt = System.currentTimeMillis();
     }
 
     @Override
     protected void onStart() {
         super.onStart();
-        if (sessionKey != null && backgroundAt > 0 && !systemPickerInProgress) {
+        if (vaultSession.isUnlocked() && backgroundAt > 0 && !systemPickerInProgress) {
             long timeout = getAutoLockMs();
             if (timeout == AUTO_LOCK_IMMEDIATELY || System.currentTimeMillis() - backgroundAt >= timeout) {
                 lockVault();
@@ -254,7 +255,7 @@ public class MainActivity extends Activity {
     }
 
     private void showUnlockScreen() {
-        sessionKey = null;
+        vaultSession.clear();
         explicitlyLocked = true;
 
         final int white = Color.WHITE;
@@ -374,16 +375,16 @@ public class MainActivity extends Activity {
         try {
             SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
             if (prefs.getInt(PREF_CRYPTO_VERSION, 0) >= CRYPTO_VERSION_2) {
-                sessionKey = unlockV2(password, prefs);
+                vaultSession.unlock(unlockV2(password, prefs));
             } else {
-                sessionKey = unlockLegacyAndMigrate(password, prefs);
+                vaultSession.unlock(unlockLegacyAndMigrate(password, prefs));
             }
             provisionAuthenticationBoundDeviceKey();
             explicitlyLocked = false;
             backgroundAt = 0;
             showVaultScreen();
         } catch (Exception e) {
-            sessionKey = null;
+            vaultSession.clear();
             toast("Incorrect master password or vault configuration is damaged.");
         }
     }
@@ -406,7 +407,7 @@ public class MainActivity extends Activity {
                     .remove(PREF_LEGACY_VERIFIER)
                     .commit();
             if (!saved) throw new GeneralSecurityException("Could not persist vault configuration");
-            sessionKey = vaultKey;
+            vaultSession.unlock(vaultKey);
             provisionAuthenticationBoundDeviceKey();
         } finally {
             java.util.Arrays.fill(salt, (byte) 0);
@@ -439,14 +440,14 @@ public class MainActivity extends Activity {
                 if (isFinishing() || isDestroyed()) return;
 
                 if (error == null && result != null) {
-                    sessionKey = result;
+                    vaultSession.unlock(result);
                     explicitlyLocked = false;
                     backgroundAt = 0;
                     showVaultScreen();
                     return;
                 }
 
-                sessionKey = null;
+                vaultSession.clear();
                 progress.setVisibility(View.GONE);
                 pass.setEnabled(true);
                 unlock.setEnabled(true);
@@ -538,7 +539,7 @@ public class MainActivity extends Activity {
     }
 
     private void showBiometricSettings() {
-        if (sessionKey == null) return;
+        if (!vaultSession.isUnlocked()) return;
         if (isBiometricUnlockConfigured()) {
             new AlertDialog.Builder(this)
                     .setTitle("Biometric unlock")
@@ -557,7 +558,7 @@ public class MainActivity extends Activity {
     }
 
     private void enableBiometricUnlock() {
-        if (sessionKey == null) return;
+        if (!vaultSession.isUnlocked()) return;
         try {
             DeviceKeyManager.ensureAuthenticationBoundKey();
             Cipher cipher = DeviceKeyManager.createEncryptionCipher();
@@ -574,7 +575,7 @@ public class MainActivity extends Activity {
                             super.onAuthenticationSucceeded(result);
                             try {
                                 Cipher authorized = requireCipher(result);
-                                byte[] rawVaultKey = sessionKey.getEncoded();
+                                byte[] rawVaultKey = vaultSession.requireKey().getEncoded();
                                 if (rawVaultKey == null || rawVaultKey.length != 32) {
                                     throw new GeneralSecurityException("Vault key is unavailable");
                                 }
@@ -644,12 +645,12 @@ public class MainActivity extends Activity {
                                 SecretKey candidate = new SecretKeySpec(rawVaultKey, "AES");
                                 String verifier = CryptoManager.decrypt(candidate, p.getString(PREF_VAULT_VERIFIER, ""));
                                 if (!VERIFIER_TEXT.equals(verifier)) throw new GeneralSecurityException("Vault verifier failed");
-                                sessionKey = candidate;
+                                vaultSession.unlock(candidate);
                                 explicitlyLocked = false;
                                 backgroundAt = 0;
                                 showVaultScreen();
                             } catch (Exception e) {
-                                sessionKey = null;
+                                vaultSession.clear();
                                 clearBiometricState(true);
                                 toast("Biometric key is no longer valid. Unlock with the master password to continue.");
                                 showUnlockScreen();
@@ -685,7 +686,7 @@ public class MainActivity extends Activity {
     private void disableBiometricUnlock() {
         clearBiometricState(true);
         toast("Biometric unlock disabled. Use your master password to unlock.");
-        if (sessionKey != null) showVaultScreen();
+        if (vaultSession.isUnlocked()) showVaultScreen();
     }
 
     private void clearBiometricState(boolean deleteDeviceKey) {
@@ -905,7 +906,7 @@ public class MainActivity extends Activity {
     }
 
     private void showSecuritySettings() {
-        if (sessionKey == null) return;
+        if (!vaultSession.isUnlocked()) return;
         LinearLayout root = baseVertical(8);
         TextView status = subtitle("Master password: configured\nBiometric unlock: "
                 + (isBiometricUnlockConfigured() ? "enabled" : "disabled")
@@ -1019,7 +1020,7 @@ public class MainActivity extends Activity {
     }
 
     private void showChangeMasterPasswordDialog() {
-        if (sessionKey == null) return;
+        if (!vaultSession.isUnlocked()) return;
         LinearLayout fields = baseVertical(6);
         EditText current = passwordField("Current master password");
         EditText next = passwordField("New master password (12+ characters)");
@@ -1044,14 +1045,15 @@ public class MainActivity extends Activity {
             try {
                 SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
                 SecretKey verifiedVaultKey = unlockV2(currentText, prefs);
-                if (!java.security.MessageDigest.isEqual(verifiedVaultKey.getEncoded(), sessionKey.getEncoded())) {
+                if (!java.security.MessageDigest.isEqual(
+                        verifiedVaultKey.getEncoded(), vaultSession.requireKey().getEncoded())) {
                     throw new GeneralSecurityException("Current password did not unlock this session");
                 }
                 byte[] newSalt = CryptoManager.randomBytes(32);
                 try {
                     SecretKey newMasterKey = CryptoManager.deriveMasterKey(newText.toCharArray(), newSalt);
-                    String wrapped = CryptoManager.wrapVaultKey(newMasterKey, sessionKey);
-                    String verifier = CryptoManager.encrypt(sessionKey, VERIFIER_TEXT);
+                    String wrapped = CryptoManager.wrapVaultKey(newMasterKey, vaultSession.requireKey());
+                    String verifier = CryptoManager.encrypt(vaultSession.requireKey(), VERIFIER_TEXT);
                     boolean saved = prefs.edit()
                             .putInt(PREF_CRYPTO_VERSION, CRYPTO_VERSION_2)
                             .putString(PREF_MASTER_SALT, Base64.encodeToString(newSalt, Base64.NO_WRAP))
@@ -1151,7 +1153,7 @@ public class MainActivity extends Activity {
     }
     private void clearSessionState() {
         screenRouter.clear();
-        sessionKey = null;
+        vaultSession.clear();
         allItems.clear();
         customCategories.clear();
         listContainer = null;
@@ -1208,13 +1210,13 @@ public class MainActivity extends Activity {
         return options.toArray(new CategoryOption[0]);
     }
     private void showVaultScreen() {
-        if (sessionKey == null) { showUnlockScreen(); return; }
+        if (!vaultSession.isUnlocked()) { showUnlockScreen(); return; }
 
         showVaultLoadingState();
 
         try {
-            customCategories = database.listCustomCategories(sessionKey);
-            allItems = database.list(sessionKey);
+            customCategories = database.listCustomCategories(vaultSession.requireKey());
+            allItems = database.list(vaultSession.requireKey());
         } catch (Exception e) {
             showVaultLoadError();
             return;
@@ -1775,7 +1777,7 @@ public class MainActivity extends Activity {
     }
     private void loadItems() {
         try {
-            allItems = database.list(sessionKey);
+            allItems = database.list(vaultSession.requireKey());
             applyFilter();
             rebuildHomeCategoryTree();
         } catch (Exception e) {
@@ -1964,7 +1966,7 @@ public class MainActivity extends Activity {
                 .setMessage("\"" + safe(deletedSnapshot.title) + "\" was deleted.")
                 .setPositiveButton("Undo", (d, w) -> {
                     try {
-                        database.save(deletedSnapshot, sessionKey);
+                        database.save(deletedSnapshot, vaultSession.requireKey());
                         loadItems();
                         toast("Item restored.");
                     } catch (Exception e) {
@@ -2138,7 +2140,7 @@ public class MainActivity extends Activity {
             item.customFields = new LinkedHashMap<>(customDraft);
 
             try {
-                database.save(item, sessionKey);
+                database.save(item, vaultSession.requireKey());
                 d.dismiss();
                 loadItems();
 
@@ -2564,7 +2566,8 @@ public class MainActivity extends Activity {
             model.fields = parsed;
             model.sensitiveFields = parsedSensitive;
             try {
-                database.saveCustomCategoryAndUpdateReferences(model, oldName, customCategories, allItems, sessionKey);
+                database.saveCustomCategoryAndUpdateReferences(
+                        model, oldName, customCategories, allItems, vaultSession.requireKey());
                 d.dismiss(); showVaultScreen();
                 toast("Category saved.");
             } catch (Exception e) { toast("Could not save category."); }
@@ -2820,7 +2823,7 @@ public class MainActivity extends Activity {
                     try {
                         database.moveContentsAndDeleteCustomCategory(
                                 allItems, customCategories, sourceCategory.name, destinationCategory,
-                                sourceCategory.id, sessionKey);
+                                sourceCategory.id, vaultSession.requireKey());
                         showVaultScreen();
                         toast("Contents moved and category deleted.");
                     } catch (Exception e) {
@@ -3026,7 +3029,7 @@ public class MainActivity extends Activity {
     }
 
     private boolean shouldLockAfterPicker() {
-        if (sessionKey == null || systemPickerStartedAt <= 0L) return false;
+        if (!vaultSession.isUnlocked() || systemPickerStartedAt <= 0L) return false;
         long timeout = getAutoLockMs();
         long elapsed = System.currentTimeMillis() - systemPickerStartedAt;
         return timeout == AUTO_LOCK_IMMEDIATELY || elapsed >= timeout;
@@ -3105,8 +3108,8 @@ public class MainActivity extends Activity {
     private void createEncryptedBackup(char[] backupPassword) {
         try {
             // Reload from the database so the backup is a complete authoritative snapshot.
-            List<CustomCategory> categories = database.listCustomCategories(sessionKey);
-            List<VaultItem> items = database.list(sessionKey);
+            List<CustomCategory> categories = database.listCustomCategories(vaultSession.requireKey());
+            List<VaultItem> items = database.list(vaultSession.requireKey());
             pendingBackupBytes = BackupManager.createBackup(
                     categories, items, backupPassword, database.currentSchemaVersion());
             Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
@@ -3201,7 +3204,8 @@ public class MainActivity extends Activity {
                 .setMessage(message)
                 .setPositiveButton("Replace current vault", (d,w) -> {
                     try {
-                        database.replaceAllFromBackup(restored.categories, restored.items, sessionKey);
+                        database.replaceAllFromBackup(
+                                restored.categories, restored.items, vaultSession.requireKey());
                         showVaultScreen();
                         toast("Encrypted backup restored successfully.");
                     } catch (Exception e) {
@@ -3346,7 +3350,8 @@ public class MainActivity extends Activity {
 
     private void commitImport(ImportManager.ParsedImport parsed) {
         try {
-            database.importBatch(parsed.categoriesToCreate, parsed.items, sessionKey);
+            database.importBatch(
+                    parsed.categoriesToCreate, parsed.items, vaultSession.requireKey());
             showVaultScreen();
             toast("Imported " + parsed.items.size() + (parsed.items.size() == 1 ? " entry." : " entries."));
         } catch (Exception e) {
@@ -3594,14 +3599,10 @@ public class MainActivity extends Activity {
 
     /** Replaces only the child of the activity-owned root; setContentView is called once. */
     private void renderRootScreen(View screen, VaultNavigationState state) {
-        if (rootContent == null) {
+        if (rootRenderer == null) {
             throw new IllegalStateException("Root content container is unavailable");
         }
-        rootContent.removeAllViews();
-        rootContent.addView(screen, new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT));
-        rootContent.setContentDescription(state.screen().contentDescription());
+        rootRenderer.render(screen, state);
     }
 
     private void showVaultLoadingState() {
@@ -3663,11 +3664,11 @@ public class MainActivity extends Activity {
     }
 
     int rootChildCountForTesting() {
-        return rootContent == null ? 0 : rootContent.getChildCount();
+        return rootRenderer == null ? 0 : rootRenderer.childCountForTesting();
     }
 
     boolean hasSessionKeyForTesting() {
-        return sessionKey != null;
+        return vaultSession.isUnlocked();
     }
 
     void triggerScreenOffForTesting() {
@@ -3675,7 +3676,7 @@ public class MainActivity extends Activity {
     }
 
     private void handleScreenOffLock() {
-        if (sessionKey != null && getLockOnScreenOff()) lockVault();
+        if (vaultSession.isUnlocked() && getLockOnScreenOff()) lockVault();
     }
 
     private int dp(int v) { return Math.round(v * getResources().getDisplayMetrics().density); }

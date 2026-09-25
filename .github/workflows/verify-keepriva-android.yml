@@ -10,6 +10,7 @@ on:
       - ui_enhancement
       - "ui_eh_ph*"
       - "phase-*"
+      - ph_00_ph_01_merge
   pull_request:
 
 permissions:

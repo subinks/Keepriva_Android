@@ -289,15 +289,49 @@ public abstract class KeeprivaTestBase {
         throw new AssertionError(
                 "MainActivity did not regain stable window focus within 5 seconds");
     }
+    /** Phase 1 security-dialog hardening: wait only on the focused dialog root. */
+    protected void waitForDialogText(String text) {
+        waitForDialogView(withText(text), "dialog text '" + text + "'");
+    }
+
+    protected void waitForDialogHint(String hint) {
+        waitForDialogView(withHint(hint), "dialog hint '" + hint + "'");
+    }
+
+    private void waitForDialogView(Matcher<View> matcher, String description) {
+        final long deadline = SystemClock.uptimeMillis() + 10000L;
+        Throwable lastFailure = null;
+
+        while (SystemClock.uptimeMillis() < deadline) {
+            try {
+                onView(matcher)
+                        .inRoot(isDialog())
+                        .check(matches(isDisplayed()));
+                return;
+            } catch (RuntimeException | AssertionError failure) {
+                lastFailure = failure;
+                SystemClock.sleep(75L);
+            }
+        }
+
+        throw new AssertionError("Timed out waiting for " + description, lastFailure);
+    }
+
     protected void openSecuritySettings() {
         onView(withContentDescription("Security")).perform(scrollTo(), click());
 
+        waitForDialogHint("Master password");
         onView(withHint("Master password"))
+                .inRoot(isDialog())
                 .perform(replaceText(TEST_PASSWORD), closeSoftKeyboard());
 
-        onView(withText("Continue")).perform(click());
+        onView(withText("Continue"))
+                .inRoot(isDialog())
+                .perform(click());
 
-        onView(withText("Change master password")).check(matches(isDisplayed()));
+        // Reauthentication dismisses one dialog and synchronously opens another.
+        // A bounded retry prevents Espresso from selecting the unfocused Activity root.
+        waitForDialogText("Change master password");
     }
 
     protected void createFolderCategory(String name) {

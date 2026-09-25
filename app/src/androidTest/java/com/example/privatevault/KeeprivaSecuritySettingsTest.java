@@ -6,6 +6,7 @@ import static androidx.test.espresso.action.ViewActions.closeSoftKeyboard;
 import static androidx.test.espresso.action.ViewActions.replaceText;
 import static androidx.test.espresso.action.ViewActions.scrollTo;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
+import static androidx.test.espresso.matcher.RootMatchers.isDialog;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;
 import static androidx.test.espresso.matcher.ViewMatchers.withHint;
@@ -21,14 +22,22 @@ import org.junit.runner.RunWith;
 @LargeTest
 public class KeeprivaSecuritySettingsTest extends KeeprivaTestBase {
 
+    // Phase 1 security-dialog hardening: every modal interaction names its root,
+    // and every test dismisses its final dialog before ActivityScenario teardown.
+
     @Test
     public void securityRequiresReauthentication() {
         createTestVault();
 
         onView(withContentDescription("Security")).perform(scrollTo(), click());
 
-        onView(withHint("Master password")).check(matches(isDisplayed()));
-        onView(withText("Continue")).check(matches(isDisplayed()));
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
+        onView(withText("Continue"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
+
+        closeCurrentDialog("Cancel");
     }
 
     @Test
@@ -36,11 +45,16 @@ public class KeeprivaSecuritySettingsTest extends KeeprivaTestBase {
         createTestVault();
 
         onView(withContentDescription("Security")).perform(scrollTo(), click());
+        waitForDialogHint("Master password");
         onView(withHint("Master password"))
+                .inRoot(isDialog())
                 .perform(replaceText("WrongPassword123!"), closeSoftKeyboard());
-        onView(withText("Continue")).perform(click());
+        onView(withText("Continue"))
+                .inRoot(isDialog())
+                .perform(click());
 
-        onView(withText("Continue")).check(matches(isDisplayed()));
+        waitForDialogText("Continue");
+        closeCurrentDialog("Cancel");
     }
 
     @Test
@@ -48,7 +62,11 @@ public class KeeprivaSecuritySettingsTest extends KeeprivaTestBase {
         createTestVault();
         openSecuritySettings();
 
-        onView(withText("Change master password")).check(matches(isDisplayed()));
+        onView(withText("Change master password"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
+
+        closeCurrentDialog("Done");
     }
 
     @Test
@@ -56,9 +74,17 @@ public class KeeprivaSecuritySettingsTest extends KeeprivaTestBase {
         createTestVault();
         openSecuritySettings();
 
-        onView(withText("Lock when screen turns off")).check(matches(isDisplayed()));
-        onView(withText("Auto-lock: 30 seconds")).check(matches(isDisplayed()));
-        onView(withText("Clipboard timeout: 30s")).check(matches(isDisplayed()));
+        onView(withText("Lock when screen turns off"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
+        onView(withText("Auto-lock: 30 seconds"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
+        onView(withText("Clipboard timeout: 30s"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
+
+        closeCurrentDialog("Done");
     }
 
     @Test
@@ -66,12 +92,17 @@ public class KeeprivaSecuritySettingsTest extends KeeprivaTestBase {
         createTestVault();
         openSecuritySettings();
 
-        onView(withText("Auto-lock: 30 seconds")).perform(click());
+        onView(withText("Auto-lock: 30 seconds"))
+                .inRoot(isDialog())
+                .perform(click());
 
-        onView(withText("Immediately")).check(matches(isDisplayed()));
-        onView(withText("30 seconds")).check(matches(isDisplayed()));
-        onView(withText("1 minute")).check(matches(isDisplayed()));
-        onView(withText("5 minutes")).check(matches(isDisplayed()));
+        waitForDialogText("Immediately");
+        assertDialogTextDisplayed("Immediately");
+        assertDialogTextDisplayed("30 seconds");
+        assertDialogTextDisplayed("1 minute");
+        assertDialogTextDisplayed("5 minutes");
+
+        closeCurrentDialog("Cancel");
     }
 
     @Test
@@ -79,13 +110,19 @@ public class KeeprivaSecuritySettingsTest extends KeeprivaTestBase {
         createTestVault();
         openSecuritySettings();
 
-        onView(withText("Auto-lock: 30 seconds")).perform(click());
-        onView(withText("Immediately")).perform(click());
-        onView(withText("Save")).perform(click());
+        onView(withText("Auto-lock: 30 seconds"))
+                .inRoot(isDialog())
+                .perform(click());
+        waitForDialogText("Immediately");
+        onView(withText("Immediately"))
+                .inRoot(isDialog())
+                .perform(click());
+        onView(withText("Save"))
+                .inRoot(isDialog())
+                .perform(click());
 
-        onView(withHint("Search title, username, phone, website or notes"))
-                .perform(scrollTo())
-                .check(matches(isDisplayed()));
+        waitForActivityWindowFocus();
+        assertHomeDisplayed();
     }
 
     @Test
@@ -93,12 +130,17 @@ public class KeeprivaSecuritySettingsTest extends KeeprivaTestBase {
         createTestVault();
         openSecuritySettings();
 
-        onView(withText("Clipboard timeout: 30s")).perform(click());
+        onView(withText("Clipboard timeout: 30s"))
+                .inRoot(isDialog())
+                .perform(click());
 
-        onView(withText("15 seconds")).check(matches(isDisplayed()));
-        onView(withText("30 seconds (recommended)")).check(matches(isDisplayed()));
-        onView(withText("60 seconds")).check(matches(isDisplayed()));
-        onView(withText("Never auto-clear")).check(matches(isDisplayed()));
+        waitForDialogText("15 seconds");
+        assertDialogTextDisplayed("15 seconds");
+        assertDialogTextDisplayed("30 seconds (recommended)");
+        assertDialogTextDisplayed("60 seconds");
+        assertDialogTextDisplayed("Never auto-clear");
+
+        closeCurrentDialog("Cancel");
     }
 
     @Test
@@ -106,13 +148,19 @@ public class KeeprivaSecuritySettingsTest extends KeeprivaTestBase {
         createTestVault();
         openSecuritySettings();
 
-        onView(withText("Clipboard timeout: 30s")).perform(click());
-        onView(withText("15 seconds")).perform(click());
-        onView(withText("Save")).perform(click());
+        onView(withText("Clipboard timeout: 30s"))
+                .inRoot(isDialog())
+                .perform(click());
+        waitForDialogText("15 seconds");
+        onView(withText("15 seconds"))
+                .inRoot(isDialog())
+                .perform(click());
+        onView(withText("Save"))
+                .inRoot(isDialog())
+                .perform(click());
 
-        onView(withHint("Search title, username, phone, website or notes"))
-                .perform(scrollTo())
-                .check(matches(isDisplayed()));
+        waitForActivityWindowFocus();
+        assertHomeDisplayed();
     }
 
     @Test
@@ -120,13 +168,16 @@ public class KeeprivaSecuritySettingsTest extends KeeprivaTestBase {
         createTestVault();
         openSecuritySettings();
 
-        onView(withText("Change master password")).perform(click());
+        onView(withText("Change master password"))
+                .inRoot(isDialog())
+                .perform(click());
 
-        onView(withHint("Current master password")).check(matches(isDisplayed()));
-        onView(withHint("New master password (12+ characters)"))
-                .check(matches(isDisplayed()));
-        onView(withHint("Confirm new master password"))
-                .check(matches(isDisplayed()));
+        waitForDialogHint("Current master password");
+        assertDialogHintDisplayed("Current master password");
+        assertDialogHintDisplayed("New master password (12+ characters)");
+        assertDialogHintDisplayed("Confirm new master password");
+
+        closeCurrentDialog("Cancel");
     }
 
     @Test
@@ -134,18 +185,24 @@ public class KeeprivaSecuritySettingsTest extends KeeprivaTestBase {
         createTestVault();
         openSecuritySettings();
 
-        onView(withText("Change master password")).perform(click());
+        openChangePasswordDialog();
 
         onView(withHint("Current master password"))
+                .inRoot(isDialog())
                 .perform(replaceText("WrongPassword123!"), closeSoftKeyboard());
         onView(withHint("New master password (12+ characters)"))
+                .inRoot(isDialog())
                 .perform(replaceText("NewKeepriva123!"), closeSoftKeyboard());
         onView(withHint("Confirm new master password"))
+                .inRoot(isDialog())
                 .perform(replaceText("NewKeepriva123!"), closeSoftKeyboard());
 
-        onView(withText("Change")).perform(click());
+        onView(withText("Change"))
+                .inRoot(isDialog())
+                .perform(click());
 
-        onView(withText("Change")).check(matches(isDisplayed()));
+        waitForDialogText("Change");
+        closeCurrentDialog("Cancel");
     }
 
     @Test
@@ -153,18 +210,24 @@ public class KeeprivaSecuritySettingsTest extends KeeprivaTestBase {
         createTestVault();
         openSecuritySettings();
 
-        onView(withText("Change master password")).perform(click());
+        openChangePasswordDialog();
 
         onView(withHint("Current master password"))
+                .inRoot(isDialog())
                 .perform(replaceText(TEST_PASSWORD), closeSoftKeyboard());
         onView(withHint("New master password (12+ characters)"))
+                .inRoot(isDialog())
                 .perform(replaceText("NewKeepriva123!"), closeSoftKeyboard());
         onView(withHint("Confirm new master password"))
+                .inRoot(isDialog())
                 .perform(replaceText("DifferentNew123!"), closeSoftKeyboard());
 
-        onView(withText("Change")).perform(click());
+        onView(withText("Change"))
+                .inRoot(isDialog())
+                .perform(click());
 
-        onView(withText("Change")).check(matches(isDisplayed()));
+        waitForDialogText("Change");
+        closeCurrentDialog("Cancel");
     }
 
     @Test
@@ -172,8 +235,45 @@ public class KeeprivaSecuritySettingsTest extends KeeprivaTestBase {
         createTestVault();
         openSecuritySettings();
 
-        onView(withText("Biometric unlock: Disabled")).perform(click());
+        onView(withText("Biometric unlock: Disabled"))
+                .inRoot(isDialog())
+                .perform(click());
 
-        onView(withText("Enable biometric unlock?")).check(matches(isDisplayed()));
+        waitForDialogText("Enable biometric unlock?");
+        assertDialogTextDisplayed("Enable biometric unlock?");
+
+        closeCurrentDialog("Cancel");
+    }
+
+    private void openChangePasswordDialog() {
+        onView(withText("Change master password"))
+                .inRoot(isDialog())
+                .perform(click());
+        waitForDialogHint("Current master password");
+    }
+
+    private void assertDialogTextDisplayed(String text) {
+        onView(withText(text))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
+    }
+
+    private void assertDialogHintDisplayed(String hint) {
+        onView(withHint(hint))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
+    }
+
+    private void closeCurrentDialog(String buttonText) {
+        onView(withText(buttonText))
+                .inRoot(isDialog())
+                .perform(click());
+        waitForActivityWindowFocus();
+    }
+
+    private void assertHomeDisplayed() {
+        onView(withHint("Search title, username, phone, website or notes"))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()));
     }
 }

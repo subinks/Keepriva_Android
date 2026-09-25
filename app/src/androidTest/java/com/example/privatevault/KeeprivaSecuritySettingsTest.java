@@ -31,6 +31,8 @@ public class KeeprivaSecuritySettingsTest extends KeeprivaTestBase {
 
         onView(withContentDescription("Security")).perform(scrollTo(), click());
 
+        waitForDialogHint("Master password");
+        onView(withHint("Master password"))
                 .inRoot(isDialog())
                 .check(matches(isDisplayed()));
         onView(withText("Continue"))

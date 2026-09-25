@@ -8,6 +8,11 @@ import static org.junit.Assert.fail;
 
 import org.junit.Test;
 
+import android.os.Bundle;
+import android.os.Parcelable;
+
+import java.io.Serializable;
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -164,19 +169,50 @@ public class Phase2AArchitectureTest {
                 DialogRegistry.class,
                 VaultRootRenderer.class,
                 VaultViewFactory.class,
-                CallbackGeneration.class
+                CallbackGeneration.class,
+                SetupController.class,
+                UnlockController.class,
+                SecuritySettingsController.class,
+                VaultSecurityPreferences.class
         };
 
         for (Class<?> type : infrastructure) {
             Arrays.stream(type.getDeclaredFields()).forEach(field -> {
+                if (Modifier.isStatic(field.getModifiers())) return;
                 assertFalse(type.getSimpleName() + " must not own SecretKey",
                         SecretKey.class.isAssignableFrom(field.getType()));
                 assertFalse(type.getSimpleName() + " must not own VaultItem",
                         VaultItem.class.isAssignableFrom(field.getType()));
                 assertFalse(type.getSimpleName() + " must not own byte arrays",
                         field.getType().equals(byte[].class));
+                assertFalse(type.getSimpleName() + " must not own Bundle state",
+                        Bundle.class.isAssignableFrom(field.getType()));
+                assertFalse(type.getSimpleName() + " must not own Parcelable state",
+                        Parcelable.class.isAssignableFrom(field.getType()));
+                assertFalse(type.getSimpleName() + " must not own Serializable state",
+                        Serializable.class.isAssignableFrom(field.getType()));
             });
         }
+    }
+
+    @Test
+    public void waveBControllers_useLifecycleAndTypedHostContracts() {
+        Class<?>[] controllers = {
+                SetupController.class,
+                UnlockController.class,
+                SecuritySettingsController.class
+        };
+        for (Class<?> controller : controllers) {
+            assertTrue(controller.getSimpleName() + " must participate in lifecycle teardown",
+                    VaultController.class.isAssignableFrom(controller));
+        }
+
+        assertTrue(SetupController.Gateway.class.isAssignableFrom(MainActivity.class));
+        assertTrue(SetupActions.class.isAssignableFrom(MainActivity.class));
+        assertTrue(UnlockController.Gateway.class.isAssignableFrom(MainActivity.class));
+        assertTrue(UnlockActions.class.isAssignableFrom(MainActivity.class));
+        assertTrue(SecuritySettingsController.Gateway.class.isAssignableFrom(MainActivity.class));
+        assertTrue(SecuritySettingsActions.class.isAssignableFrom(MainActivity.class));
     }
 
     private static final class FakeDialog implements DialogRegistry.DialogHandle {

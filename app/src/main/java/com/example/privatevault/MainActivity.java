@@ -9,11 +9,9 @@ import android.content.IntentFilter;
 import android.content.Intent;
 import android.net.Uri;
 import android.content.SharedPreferences;
-import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.os.CancellationSignal;
-import android.text.InputType;
 import android.util.Base64;
 import android.view.Gravity;
 import android.view.View;
@@ -23,11 +21,9 @@ import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.FrameLayout;
-import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
-import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -53,7 +49,13 @@ import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 
-public class MainActivity extends Activity {
+public class MainActivity extends Activity implements
+        SetupController.Gateway,
+        SetupActions,
+        UnlockController.Gateway,
+        UnlockActions,
+        SecuritySettingsController.Gateway,
+        SecuritySettingsActions {
     private static final String PREFS = "vault_config";
     private static final String PREF_HIDDEN_BUILT_IN_CATEGORIES = "hidden_built_in_categories";
     // v1.x legacy configuration keys. Kept for one-time in-place migration.
@@ -72,15 +74,6 @@ public class MainActivity extends Activity {
     private static final String DEVICE_KEY_READY = "auth_bound_key_ready";
     private static final String PREF_BIOMETRIC_WRAPPED_VAULT_KEY = "biometric_wrapped_vault_key_v1";
     private static final String PREF_BIOMETRIC_IV = "biometric_wrapped_vault_key_iv_v1";
-    private static final String PREF_CLIPBOARD_TIMEOUT_MS = "clipboard_timeout_ms_v1";
-    private static final long DEFAULT_CLIPBOARD_TIMEOUT_MS = ClipboardSecurityManager.THIRTY_SECONDS;
-    private static final String PREF_AUTO_LOCK_MS = "auto_lock_ms_v1";
-    private static final String PREF_LOCK_ON_SCREEN_OFF = "lock_on_screen_off_v1";
-    private static final String PREF_MAX_CATEGORY_DEPTH = "max_category_depth_v1";
-    private static final int DEFAULT_MAX_CATEGORY_DEPTH = 3;
-    private static final int HARD_MAX_CATEGORY_DEPTH = 5;
-    private static final long DEFAULT_AUTO_LOCK_MS = 30_000L;
-    private static final long AUTO_LOCK_IMMEDIATELY = 0L;
     private static final String[] BUILT_IN_CATEGORIES = {"Login", "Website", "App", "Contact", "Banking", "Work", "Personal", "Secure Note", "Other"};
     private static final int EXPORT_REQUEST = 7001;
     private static final int TEMPLATE_EXPORT_REQUEST = 7002;
@@ -103,6 +96,10 @@ public class MainActivity extends Activity {
     private VaultDatabase database;
     private VaultRootRenderer rootRenderer;
     private VaultViewFactory viewFactory;
+    private VaultSecurityPreferences securityPreferences;
+    private SetupController setupController;
+    private UnlockController unlockController;
+    private SecuritySettingsController securitySettingsController;
     private final VaultScreenRouter screenRouter = new VaultScreenRouter();
     private LinearLayout listContainer;
     private EditText searchBox;
@@ -146,6 +143,11 @@ public class MainActivity extends Activity {
             showReleaseSecurityBlock(releaseSecurity.message);
             return;
         }
+        securityPreferences = new VaultSecurityPreferences(getSharedPreferences(PREFS, MODE_PRIVATE));
+        setupController = controllerRegistry.register(new SetupController(viewFactory, this, this));
+        unlockController = controllerRegistry.register(new UnlockController(this, viewFactory, this, this));
+        securitySettingsController = controllerRegistry.register(new SecuritySettingsController(
+                this, viewFactory, dialogRegistry, securityPreferences, this, this));
         database = new VaultDatabase(this);
         clipboardSecurity = new ClipboardSecurityManager(this);
         registerScreenOffReceiver();
@@ -177,7 +179,8 @@ public class MainActivity extends Activity {
         super.onStart();
         if (vaultSession.isUnlocked() && backgroundAt > 0 && !systemPickerInProgress) {
             long timeout = getAutoLockMs();
-            if (timeout == AUTO_LOCK_IMMEDIATELY || System.currentTimeMillis() - backgroundAt >= timeout) {
+            if (timeout == VaultSecurityPreferences.AUTO_LOCK_IMMEDIATELY
+                    || System.currentTimeMillis() - backgroundAt >= timeout) {
                 lockVault();
             }
         }
@@ -231,169 +234,27 @@ public class MainActivity extends Activity {
     }
 
     private void showSetupScreen() {
-        LinearLayout root = baseVertical(24);
-        root.setGravity(Gravity.CENTER_HORIZONTAL);
-        root.addView(title("Create Keepriva"));
-        root.addView(subtitle("Your master password never leaves this device. If you forget it, the encrypted vault cannot be recovered."));
-
-        EditText pass = passwordField("Master password (12+ characters)");
-        EditText confirm = passwordField("Confirm master password");
-        root.addView(pass); root.addView(confirm);
-
-        Button create = primaryButton("Create encrypted vault");
-        create.setOnClickListener(v -> {
-            String p1 = pass.getText().toString();
-            String p2 = confirm.getText().toString();
-            String strengthError = validateNewMasterPassword(p1);
-            if (strengthError != null) { toast(strengthError); return; }
-            if (!p1.equals(p2)) { toast("Passwords do not match."); return; }
-            try {
-                initializeV2Vault(p1);
-                explicitlyLocked = false;
-                showVaultScreen();
-            } catch (Exception e) {
-                toast("Unable to initialize vault: " + e.getMessage());
-            }
-        });
-        root.addView(create);
         VaultNavigationState state = VaultNavigationState.root(VaultScreen.SETUP);
         screenRouter.reset(state);
-        renderRootScreen(wrap(root), state);
+        renderRootScreen(setupController.createView(), state);
     }
 
     private void showUnlockScreen() {
         vaultSession.clear();
         explicitlyLocked = true;
-
-        final int white = Color.WHITE;
-        final int mutedWhite = Color.argb(215, 255, 255, 255);
-
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setGravity(Gravity.CENTER_HORIZONTAL);
-        root.setPadding(dp(26), dp(34), dp(26), dp(30));
-        root.setBackgroundColor(getColor(R.color.keepriva_primary_dark));
-
-        ImageView logo = new ImageView(this);
-        logo.setImageResource(R.drawable.ic_keepriva_shield_leaf);
-        logo.setContentDescription("Keepriva shield and leaf logo");
-        LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(dp(88), dp(88));
-        logoParams.bottomMargin = dp(10);
-        root.addView(logo, logoParams);
-
-        TextView appName = new TextView(this);
-        appName.setText("Keepriva");
-        appName.setTextColor(white);
-        appName.setTextSize(32);
-        appName.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        appName.setGravity(Gravity.CENTER);
-        root.addView(appName, matchWidth());
-
-        TextView tagline = new TextView(this);
-        tagline.setText("Your secrets. Your control.");
-        tagline.setTextColor(mutedWhite);
-        tagline.setTextSize(15);
-        tagline.setGravity(Gravity.CENTER);
-        tagline.setPadding(0, dp(4), 0, dp(22));
-        root.addView(tagline, matchWidth());
-
-        LinearLayout authCard = UiStyle.verticalCard(this, 18);
-        authCard.addView(UiStyle.sectionTitle(this, "Unlock your vault"));
-        authCard.addView(UiStyle.sectionCaption(
-                this,
-                isBiometricUnlockConfigured()
-                        ? "Use biometrics or your master password."
-                        : "Use your master password. Biometrics can be enabled later from Security."
-        ));
-
-        if (isBiometricUnlockConfigured()) {
-            Button biometric = button("Unlock with fingerprint / face");
-            biometric.setCompoundDrawablesWithIntrinsicBounds(
-                    R.drawable.ic_keepriva_fingerprint, 0, 0, 0);
-            biometric.setCompoundDrawablePadding(dp(8));
-            biometric.setContentDescription("Unlock Keepriva with biometrics");
-            biometric.setOnClickListener(v -> unlockWithBiometric());
-            authCard.addView(biometric, matchWidth());
-
-            TextView or = UiStyle.sectionCaption(this, "or use your master password");
-            or.setGravity(Gravity.CENTER);
-            or.setPadding(0, dp(12), 0, dp(6));
-            authCard.addView(or, matchWidth());
-        }
-
-        EditText pass = passwordField("Master password");
-        pass.setContentDescription("Master password");
-        authCard.addView(pass, matchWidth());
-
-        ProgressBar progress = new ProgressBar(this);
-        progress.setIndeterminate(true);
-        progress.setVisibility(View.GONE);
-        LinearLayout.LayoutParams progressParams = new LinearLayout.LayoutParams(dp(28), dp(28));
-        progressParams.gravity = Gravity.CENTER_HORIZONTAL;
-        progressParams.topMargin = dp(10);
-        authCard.addView(progress, progressParams);
-
-        Button unlock = primaryButton("Unlock");
-        unlock.setContentDescription("Unlock with master password");
-
-        View.OnClickListener action = v -> {
-            String entered = pass.getText().toString();
-            if (entered.isEmpty()) {
-                pass.setError("Enter your master password");
-                return;
-            }
-
-            pass.setEnabled(false);
-            unlock.setEnabled(false);
-            unlock.setText("Unlocking…");
-            progress.setVisibility(View.VISIBLE);
-            unlockInBackground(entered, pass, unlock, progress);
-        };
-
-        unlock.setOnClickListener(action);
-        pass.setOnEditorActionListener((v, actionId, event) -> {
-            action.onClick(v);
-            return true;
-        });
-
-        LinearLayout.LayoutParams unlockParams = matchWidth();
-        unlockParams.topMargin = dp(10);
-        authCard.addView(unlock, unlockParams);
-
-        root.addView(authCard, matchWidth());
-
-        TextView footer = new TextView(this);
-        footer.setText("Fully offline  •  Secure  •  Private");
-        footer.setTextColor(Color.argb(195, 255, 255, 255));
-        footer.setTextSize(12);
-        footer.setGravity(Gravity.CENTER);
-        footer.setPadding(0, dp(22), 0, 0);
-        root.addView(footer, matchWidth());
-
-        ScrollView screen = new ScrollView(this);
-        screen.setFillViewport(true);
-        screen.setBackgroundColor(getColor(R.color.keepriva_primary_dark));
-        screen.addView(root);
         VaultNavigationState state = VaultNavigationState.root(VaultScreen.UNLOCK);
         screenRouter.reset(state);
-        renderRootScreen(screen, state);
+        renderRootScreen(unlockController.createView(isBiometricUnlockConfigured()), state);
     }
-    private void unlock(String password) {
-        try {
-            SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
-            if (prefs.getInt(PREF_CRYPTO_VERSION, 0) >= CRYPTO_VERSION_2) {
-                vaultSession.unlock(unlockV2(password, prefs));
-            } else {
-                vaultSession.unlock(unlockLegacyAndMigrate(password, prefs));
-            }
-            provisionAuthenticationBoundDeviceKey();
-            explicitlyLocked = false;
-            backgroundAt = 0;
-            showVaultScreen();
-        } catch (Exception e) {
-            vaultSession.clear();
-            toast("Incorrect master password or vault configuration is damaged.");
-        }
+    @Override
+    public void initializeVault(String password) throws Exception {
+        initializeV2Vault(password);
+    }
+
+    @Override
+    public void onSetupCompleted() {
+        explicitlyLocked = false;
+        showVaultScreen();
     }
 
     private void initializeV2Vault(String password) throws Exception {
@@ -421,7 +282,17 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void unlockInBackground(String password, EditText pass, Button unlock, ProgressBar progress) {
+    @Override
+    public void requestPasswordUnlock(String password, UnlockController.Attempt attempt) {
+        unlockInBackground(password, attempt);
+    }
+
+    @Override
+    public void requestBiometricUnlock() {
+        unlockWithBiometric();
+    }
+
+    private void unlockInBackground(String password, UnlockController.Attempt attempt) {
         CallbackGeneration.Token callbackToken = callbackGeneration.capture();
         unlockExecutor.execute(() -> {
             SecretKey unlocked = null;
@@ -449,21 +320,26 @@ public class MainActivity extends Activity {
 
                 if (error == null && result != null) {
                     vaultSession.unlock(result);
-                    explicitlyLocked = false;
-                    backgroundAt = 0;
-                    showVaultScreen();
+                    unlockController.completeSuccess(attempt);
                     return;
                 }
 
                 vaultSession.clear();
-                progress.setVisibility(View.GONE);
-                pass.setEnabled(true);
-                unlock.setEnabled(true);
-                unlock.setText("Unlock");
-                pass.requestFocus();
-                toast("Incorrect master password or vault configuration is damaged.");
+                unlockController.completeFailure(attempt);
             });
         });
+    }
+
+    @Override
+    public void onUnlockCompleted() {
+        explicitlyLocked = false;
+        backgroundAt = 0;
+        showVaultScreen();
+    }
+
+    @Override
+    public void onUnlockCancelled() {
+        // The current UI stays on the unlock screen when authentication is cancelled.
     }
     private SecretKey unlockV2(String password, SharedPreferences prefs) throws Exception {
         byte[] salt = Base64.decode(prefs.getString(PREF_MASTER_SALT, ""), Base64.NO_WRAP);
@@ -546,27 +422,15 @@ public class MainActivity extends Activity {
                 && p.contains(PREF_BIOMETRIC_IV);
     }
 
-    private void showBiometricSettings() {
-        if (!vaultSession.isUnlocked()) return;
-        if (isBiometricUnlockConfigured()) {
-            showDialog(new AlertDialog.Builder(this)
-                    .setTitle("Biometric unlock")
-                    .setMessage("Biometric unlock is enabled on this device. The master password remains the recovery method.")
-                    .setPositiveButton("Disable", (d, w) -> disableBiometricUnlock())
-                    .setNegativeButton("Cancel", null)
-                    .create());
-        } else {
-            showDialog(new AlertDialog.Builder(this)
-                    .setTitle("Enable biometric unlock?")
-                    .setMessage("Your fingerprint or strong face authentication will authorize Android Keystore to unwrap the vault key. Your master password remains available as fallback and recovery.")
-                    .setPositiveButton("Enable", (d, w) -> enableBiometricUnlock())
-                    .setNegativeButton("Cancel", null)
-                    .create());
-        }
+    @Override
+    public boolean isBiometricConfigured() {
+        return isBiometricUnlockConfigured();
     }
 
-    private void enableBiometricUnlock() {
+    @Override
+    public void enableBiometricUnlock() {
         if (!vaultSession.isUnlocked()) return;
+        CallbackGeneration.Token callbackToken = callbackGeneration.capture();
         try {
             DeviceKeyManager.ensureAuthenticationBoundKey();
             Cipher cipher = DeviceKeyManager.createEncryptionCipher();
@@ -581,6 +445,8 @@ public class MainActivity extends Activity {
                         @Override
                         public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
                             super.onAuthenticationSucceeded(result);
+                            if (!callbackGeneration.isCurrent(callbackToken)
+                                    || isFinishing() || isDestroyed()) return;
                             try {
                                 Cipher authorized = requireCipher(result);
                                 byte[] rawVaultKey = vaultSession.requireKey().getEncoded();
@@ -613,6 +479,8 @@ public class MainActivity extends Activity {
                         @Override
                         public void onAuthenticationError(int errorCode, CharSequence errString) {
                             super.onAuthenticationError(errorCode, errString);
+                            if (!callbackGeneration.isCurrent(callbackToken)
+                                    || isFinishing() || isDestroyed()) return;
                             if (errorCode != BiometricPrompt.BIOMETRIC_ERROR_CANCELED
                                     && errorCode != BiometricPrompt.BIOMETRIC_ERROR_USER_CANCELED) {
                                 toast("Biometric authentication is unavailable. Use the master password.");
@@ -628,6 +496,7 @@ public class MainActivity extends Activity {
     private void unlockWithBiometric() {
         SharedPreferences p = getSharedPreferences(PREFS, MODE_PRIVATE);
         if (!isBiometricUnlockConfigured()) return;
+        CallbackGeneration.Token callbackToken = callbackGeneration.capture();
         try {
             byte[] iv = Base64.decode(p.getString(PREF_BIOMETRIC_IV, ""), Base64.NO_WRAP);
             Cipher cipher = DeviceKeyManager.createDecryptionCipher(iv);
@@ -643,6 +512,8 @@ public class MainActivity extends Activity {
                         @Override
                         public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
                             super.onAuthenticationSucceeded(result);
+                            if (!callbackGeneration.isCurrent(callbackToken)
+                                    || isFinishing() || isDestroyed()) return;
                             byte[] rawVaultKey = null;
                             byte[] wrapped = null;
                             try {
@@ -654,9 +525,7 @@ public class MainActivity extends Activity {
                                 String verifier = CryptoManager.decrypt(candidate, p.getString(PREF_VAULT_VERIFIER, ""));
                                 if (!VERIFIER_TEXT.equals(verifier)) throw new GeneralSecurityException("Vault verifier failed");
                                 vaultSession.unlock(candidate);
-                                explicitlyLocked = false;
-                                backgroundAt = 0;
-                                showVaultScreen();
+                                unlockController.completeBiometricSuccess();
                             } catch (Exception e) {
                                 vaultSession.clear();
                                 clearBiometricState(true);
@@ -671,6 +540,8 @@ public class MainActivity extends Activity {
                         @Override
                         public void onAuthenticationError(int errorCode, CharSequence errString) {
                             super.onAuthenticationError(errorCode, errString);
+                            if (!callbackGeneration.isCurrent(callbackToken)
+                                    || isFinishing() || isDestroyed()) return;
                             if (errorCode != BiometricPrompt.BIOMETRIC_ERROR_CANCELED
                                     && errorCode != BiometricPrompt.BIOMETRIC_ERROR_USER_CANCELED) {
                                 toast("Biometric unlock failed. Use the master password.");
@@ -691,7 +562,8 @@ public class MainActivity extends Activity {
         return result.getCryptoObject().getCipher();
     }
 
-    private void disableBiometricUnlock() {
+    @Override
+    public void disableBiometricUnlock() {
         clearBiometricState(true);
         toast("Biometric unlock disabled. Use your master password to unlock.");
         if (vaultSession.isUnlocked()) showVaultScreen();
@@ -709,19 +581,15 @@ public class MainActivity extends Activity {
     }
 
     private long getAutoLockMs() {
-        return getSharedPreferences(PREFS, MODE_PRIVATE)
-                .getLong(PREF_AUTO_LOCK_MS, DEFAULT_AUTO_LOCK_MS);
+        return securityPreferences.autoLockMs();
     }
 
     private boolean getLockOnScreenOff() {
-        return getSharedPreferences(PREFS, MODE_PRIVATE)
-                .getBoolean(PREF_LOCK_ON_SCREEN_OFF, true);
+        return securityPreferences.lockOnScreenOff();
     }
 
     private int getMaxCategoryDepth() {
-        int configured = getSharedPreferences(PREFS, MODE_PRIVATE)
-                .getInt(PREF_MAX_CATEGORY_DEPTH, DEFAULT_MAX_CATEGORY_DEPTH);
-        return Math.max(1, Math.min(HARD_MAX_CATEGORY_DEPTH, configured));
+        return securityPreferences.maxCategoryDepth();
     }
 
     /** Root categories have depth 1. Unknown/broken references fail conservatively at max+1. */
@@ -731,19 +599,22 @@ public class MainActivity extends Activity {
         Set<String> seen = new HashSet<>();
         int depth = 1;
         while (!current.isEmpty()) {
-            if (!seen.add(current.toLowerCase(Locale.ROOT))) return HARD_MAX_CATEGORY_DEPTH + 1;
+            if (!seen.add(current.toLowerCase(Locale.ROOT))) {
+                return VaultSecurityPreferences.HARD_MAX_CATEGORY_DEPTH + 1;
+            }
             CustomCategory c = findCustomCategory(current);
             if (c == null || safe(c.parentName).trim().isEmpty()) return depth;
             String parent = safe(c.parentName).trim();
             depth++;
             if (isBuiltInCategory(parent)) return depth;
             current = parent;
-            if (depth > HARD_MAX_CATEGORY_DEPTH + 1) return depth;
+            if (depth > VaultSecurityPreferences.HARD_MAX_CATEGORY_DEPTH + 1) return depth;
         }
         return depth;
     }
 
-    private int deepestCategoryDepth() {
+    @Override
+    public int deepestCategoryDepth() {
         int deepest = 1;
         for (CustomCategory c : customCategories) deepest = Math.max(deepest, categoryDepth(c.name));
         return deepest;
@@ -828,319 +699,82 @@ public class MainActivity extends Activity {
     }
 
     private void showPreferencesDialog() {
-        LinearLayout root = baseVertical(8);
-        root.addView(subtitle("Category nesting controls how many levels of categories and sub-categories Keepriva allows. Existing data is never flattened automatically."));
-
-        CheckBox enableEdit = new CheckBox(this);
-        enableEdit.setText("Enable editing category nesting depth");
-        enableEdit.setChecked(false);
-        root.addView(enableEdit);
-
-        EditText depth = field("Maximum category depth (1-5)", String.valueOf(getMaxCategoryDepth()));
-        depth.setInputType(InputType.TYPE_CLASS_NUMBER);
-        depth.setEnabled(false);
-        root.addView(depth);
-        root.addView(subtitle("Default: 3. Hard maximum: 5. Root categories count as level 1."));
-
-        enableEdit.setOnCheckedChangeListener((buttonView, checked) -> depth.setEnabled(checked));
-
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("Preferences")
-                .setView(root)
-                .setPositiveButton("Save", null)
-                .setNegativeButton("Cancel", null)
-                .create();
-        ScreenSecurityManager.protect(dialog);
-        dialog.setOnShowListener(v -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(btn -> {
-            if (!enableEdit.isChecked()) {
-                dialog.dismiss();
-                return;
-            }
-            int requested;
-            try { requested = Integer.parseInt(depth.getText().toString().trim()); }
-            catch (Exception e) { depth.setError("Enter a number from 1 to 5"); return; }
-            if (requested < 1 || requested > HARD_MAX_CATEGORY_DEPTH) {
-                depth.setError("Allowed range is 1 to " + HARD_MAX_CATEGORY_DEPTH);
-                return;
-            }
-            int existing = deepestCategoryDepth();
-            if (requested < existing) {
-                depth.setError("Current hierarchy already uses " + existing + " levels. Move categories upward before reducing this preference.");
-                return;
-            }
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                    .putInt(PREF_MAX_CATEGORY_DEPTH, requested).apply();
-            dialog.dismiss();
-            toast("Maximum category depth set to " + requested + ".");
-        }));
-        showDialog(dialog);
-    }
-
-    private String autoLockLabel(long timeout) {
-        if (timeout == 0L) return "Immediately";
-        if (timeout == 30_000L) return "30 seconds";
-        if (timeout == 60_000L) return "1 minute";
-        if (timeout == 300_000L) return "5 minutes";
-        return (timeout / 1000L) + " seconds";
+        securitySettingsController.showPreferences();
     }
 
     private void requestMasterPasswordReauth(String purpose, Runnable onSuccess) {
-        EditText pass = passwordField("Master password");
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle(purpose)
-                .setMessage("Enter your master password to continue.")
-                .setView(pass)
-                .setPositiveButton("Continue", null)
-                .setNegativeButton("Cancel", null)
-                .create();
-        ScreenSecurityManager.protect(dialog);
-        dialog.setOnShowListener(v -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(btn -> {
-            try {
-                SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
-                SecretKey verified = prefs.getInt(PREF_CRYPTO_VERSION, 0) >= CRYPTO_VERSION_2
-                        ? unlockV2(pass.getText().toString(), prefs)
-                        : unlockLegacyAndMigrate(pass.getText().toString(), prefs);
-                if (verified == null) throw new GeneralSecurityException("Verification failed");
-                pass.setText("");
-                dialog.dismiss();
-                onSuccess.run();
-            } catch (Exception e) {
-                pass.setText("");
-                pass.requestFocus();
-                toast("Incorrect master password.");
-            }
-        }));
-        showDialog(dialog);
+        securitySettingsController.requestMasterPasswordReauth(purpose, onSuccess);
     }
 
     private void showSecuritySettings() {
-        if (!vaultSession.isUnlocked()) return;
-        LinearLayout root = baseVertical(8);
-        TextView status = subtitle("Master password: configured\nBiometric unlock: "
-                + (isBiometricUnlockConfigured() ? "enabled" : "disabled")
-                + "\nAuto-lock: " + autoLockLabel(getAutoLockMs())
-                + "\nLock on screen off: " + (getLockOnScreenOff() ? "enabled" : "disabled")
-                + "\nClipboard timeout: " + clipboardTimeoutLabel(getClipboardTimeoutMs()));
-        root.addView(status);
-
-        Button changePassword = button("Change master password");
-        changePassword.setOnClickListener(v -> {
-            AlertDialog parentDialog = findShowingDialogForView(v);
-            if (parentDialog != null) parentDialog.dismiss();
-            showChangeMasterPasswordDialog();
-        });
-        root.addView(changePassword);
-
-        Button autoLock = button("Auto-lock: " + autoLockLabel(getAutoLockMs()));
-        autoLock.setOnClickListener(v -> {
-            AlertDialog parentDialog = findShowingDialogForView(v);
-            if (parentDialog != null) parentDialog.dismiss();
-            showAutoLockSettings();
-        });
-        root.addView(autoLock);
-
-        CheckBox screenOff = new CheckBox(this);
-        screenOff.setText("Lock when screen turns off");
-        screenOff.setChecked(getLockOnScreenOff());
-        screenOff.setOnCheckedChangeListener((b, checked) -> getSharedPreferences(PREFS, MODE_PRIVATE)
-                .edit().putBoolean(PREF_LOCK_ON_SCREEN_OFF, checked).apply());
-        root.addView(screenOff);
-
-        Button biometric = button(isBiometricUnlockConfigured() ? "Biometric unlock: Enabled" : "Biometric unlock: Disabled");
-        biometric.setOnClickListener(v -> {
-            AlertDialog parentDialog = findShowingDialogForView(v);
-            if (parentDialog != null) parentDialog.dismiss();
-            showBiometricSettings();
-        });
-        root.addView(biometric);
-
-        Button clipboard = button("Clipboard timeout: " + clipboardTimeoutLabel(getClipboardTimeoutMs()));
-        clipboard.setOnClickListener(v -> {
-            AlertDialog parentDialog = findShowingDialogForView(v);
-            if (parentDialog != null) parentDialog.dismiss();
-            showClipboardSettings();
-        });
-        root.addView(clipboard);
-
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("Security settings")
-                .setView(root)
-                .setPositiveButton("Done", (d, w) -> showVaultScreen())
-                .create();
-        root.setTag(dialog);
-        ScreenSecurityManager.protect(dialog);
-        showDialog(dialog);
-    }
-
-    private void showAutoLockSettings() {
-        final String[] labels = {"Immediately", "30 seconds", "1 minute", "5 minutes"};
-        final long[] values = {0L, 30_000L, 60_000L, 300_000L};
-        long current = getAutoLockMs();
-        int selected = 1;
-        for (int i = 0; i < values.length; i++) if (values[i] == current) selected = i;
-
-        LinearLayout box = baseVertical(6);
-        box.addView(subtitle("Keepriva locks after it has been left in the background for this long."));
-
-        android.widget.RadioGroup group = new android.widget.RadioGroup(this);
-        group.setOrientation(android.widget.RadioGroup.VERTICAL);
-        for (int i = 0; i < labels.length; i++) {
-            android.widget.RadioButton rb = new android.widget.RadioButton(this);
-            rb.setId(View.generateViewId());
-            rb.setText(labels[i]);
-            rb.setTag(i);
-            group.addView(rb);
-            if (i == selected) group.check(rb.getId());
-        }
-        box.addView(group);
-
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("Auto-lock")
-                .setView(box)
-                .setPositiveButton("Save", null)
-                .setNegativeButton("Cancel", null)
-                .create();
-
-        dialog.setOnShowListener(v -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(btn -> {
-            int checkedId = group.getCheckedRadioButtonId();
-            View checked = group.findViewById(checkedId);
-            if (checked == null || checked.getTag() == null) return;
-            int which = (Integer) checked.getTag();
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                    .putLong(PREF_AUTO_LOCK_MS, values[which]).apply();
-            dialog.dismiss();
-            toast("Auto-lock: " + labels[which]);
-        }));
-
-        ScreenSecurityManager.protect(dialog);
-        showDialog(dialog);
-    }
-
-    private String validateNewMasterPassword(String password) {
-        if (password == null || password.length() < 12) return "Use at least 12 characters for a new master password.";
-        int classes = 0;
-        if (password.matches(".*[a-z].*")) classes++;
-        if (password.matches(".*[A-Z].*")) classes++;
-        if (password.matches(".*[0-9].*")) classes++;
-        if (password.matches(".*[^A-Za-z0-9].*")) classes++;
-        if (classes < 3) return "Use at least three of: lowercase, uppercase, number, symbol.";
-        return null;
-    }
-
-    private void showChangeMasterPasswordDialog() {
-        if (!vaultSession.isUnlocked()) return;
-        LinearLayout fields = baseVertical(6);
-        EditText current = passwordField("Current master password");
-        EditText next = passwordField("New master password (12+ characters)");
-        EditText confirm = passwordField("Confirm new master password");
-        fields.addView(current); fields.addView(next); fields.addView(confirm);
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("Change master password")
-                .setMessage("Only the vault key wrapper changes. Your encrypted entries do not need to be rewritten.")
-                .setView(fields)
-                .setPositiveButton("Change", null)
-                .setNegativeButton("Cancel", null)
-                .create();
-        ScreenSecurityManager.protect(dialog);
-        dialog.setOnShowListener(v -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(btn -> {
-            String currentText = current.getText().toString();
-            String newText = next.getText().toString();
-            String confirmText = confirm.getText().toString();
-            String strengthError = validateNewMasterPassword(newText);
-            if (strengthError != null) { toast(strengthError); return; }
-            if (!newText.equals(confirmText)) { toast("New passwords do not match."); return; }
-            if (newText.equals(currentText)) { toast("Choose a different master password."); return; }
-            try {
-                SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
-                SecretKey verifiedVaultKey = unlockV2(currentText, prefs);
-                if (!java.security.MessageDigest.isEqual(
-                        verifiedVaultKey.getEncoded(), vaultSession.requireKey().getEncoded())) {
-                    throw new GeneralSecurityException("Current password did not unlock this session");
-                }
-                byte[] newSalt = CryptoManager.randomBytes(32);
-                try {
-                    SecretKey newMasterKey = CryptoManager.deriveMasterKey(newText.toCharArray(), newSalt);
-                    String wrapped = CryptoManager.wrapVaultKey(newMasterKey, vaultSession.requireKey());
-                    String verifier = CryptoManager.encrypt(vaultSession.requireKey(), VERIFIER_TEXT);
-                    boolean saved = prefs.edit()
-                            .putInt(PREF_CRYPTO_VERSION, CRYPTO_VERSION_2)
-                            .putString(PREF_MASTER_SALT, Base64.encodeToString(newSalt, Base64.NO_WRAP))
-                            .putString(PREF_WRAPPED_VAULT_KEY, wrapped)
-                            .putString(PREF_VAULT_VERIFIER, verifier)
-                            .commit();
-                    if (!saved) throw new GeneralSecurityException("Could not save new master password configuration");
-                } finally {
-                    java.util.Arrays.fill(newSalt, (byte) 0);
-                }
-                current.setText(""); next.setText(""); confirm.setText("");
-                dialog.dismiss();
-                toast("Master password changed. Biometric unlock remains available on this device.");
-                showVaultScreen();
-            } catch (Exception e) {
-                current.setText("");
-                toast("Current master password is incorrect or the password change could not be saved.");
-            }
-        }));
-        showDialog(dialog);
+        securitySettingsController.showSecuritySettings();
     }
 
     private long getClipboardTimeoutMs() {
-        return getSharedPreferences(PREFS, MODE_PRIVATE)
-                .getLong(PREF_CLIPBOARD_TIMEOUT_MS, DEFAULT_CLIPBOARD_TIMEOUT_MS);
+        return securityPreferences.clipboardTimeoutMs();
     }
 
-    private String clipboardTimeoutLabel(long timeout) {
-        if (timeout == ClipboardSecurityManager.NEVER_CLEAR) return "Never";
-        return (timeout / 1000L) + "s";
+    @Override
+    public boolean isSessionUnlocked() {
+        return vaultSession.isUnlocked();
     }
 
-    private void showClipboardSettings() {
-        final String[] labels = {"15 seconds", "30 seconds (recommended)", "60 seconds", "Never auto-clear"};
-        final long[] values = {
-                ClipboardSecurityManager.FIFTEEN_SECONDS,
-                ClipboardSecurityManager.THIRTY_SECONDS,
-                ClipboardSecurityManager.SIXTY_SECONDS,
-                ClipboardSecurityManager.NEVER_CLEAR
-        };
-        long current = getClipboardTimeoutMs();
-        int selected = 1;
-        for (int i = 0; i < values.length; i++) if (values[i] == current) selected = i;
-
-        LinearLayout box = baseVertical(6);
-        box.addView(subtitle("Copied passwords are marked sensitive. Keepriva can also clear a copied password after a short delay. 'Never' is less secure."));
-
-        android.widget.RadioGroup group = new android.widget.RadioGroup(this);
-        group.setOrientation(android.widget.RadioGroup.VERTICAL);
-        for (int i = 0; i < labels.length; i++) {
-            android.widget.RadioButton rb = new android.widget.RadioButton(this);
-            rb.setId(View.generateViewId());
-            rb.setText(labels[i]);
-            rb.setTag(i);
-            group.addView(rb);
-            if (i == selected) group.check(rb.getId());
+    @Override
+    public boolean verifyMasterPassword(String password) {
+        try {
+            SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+            SecretKey verified = prefs.getInt(PREF_CRYPTO_VERSION, 0) >= CRYPTO_VERSION_2
+                    ? unlockV2(password, prefs)
+                    : unlockLegacyAndMigrate(password, prefs);
+            return verified != null;
+        } catch (Exception error) {
+            return false;
         }
-        box.addView(group);
+    }
 
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("Password clipboard timeout")
-                .setView(box)
-                .setPositiveButton("Save", null)
-                .setNegativeButton("Cancel", null)
-                .create();
+    @Override
+    public boolean changeMasterPassword(String currentPassword, String newPassword) {
+        try {
+            SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+            SecretKey verifiedVaultKey = unlockV2(currentPassword, prefs);
+            if (!java.security.MessageDigest.isEqual(
+                    verifiedVaultKey.getEncoded(), vaultSession.requireKey().getEncoded())) {
+                throw new GeneralSecurityException("Current password did not unlock this session");
+            }
+            byte[] newSalt = CryptoManager.randomBytes(32);
+            try {
+                SecretKey newMasterKey = CryptoManager.deriveMasterKey(newPassword.toCharArray(), newSalt);
+                String wrapped = CryptoManager.wrapVaultKey(newMasterKey, vaultSession.requireKey());
+                String verifier = CryptoManager.encrypt(vaultSession.requireKey(), VERIFIER_TEXT);
+                boolean saved = prefs.edit()
+                        .putInt(PREF_CRYPTO_VERSION, CRYPTO_VERSION_2)
+                        .putString(PREF_MASTER_SALT, Base64.encodeToString(newSalt, Base64.NO_WRAP))
+                        .putString(PREF_WRAPPED_VAULT_KEY, wrapped)
+                        .putString(PREF_VAULT_VERIFIER, verifier)
+                        .commit();
+                if (!saved) throw new GeneralSecurityException("Could not save new master password configuration");
+            } finally {
+                java.util.Arrays.fill(newSalt, (byte) 0);
+            }
+            return true;
+        } catch (Exception error) {
+            return false;
+        }
+    }
 
-        dialog.setOnShowListener(v -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(btn -> {
-            int checkedId = group.getCheckedRadioButtonId();
-            View checked = group.findViewById(checkedId);
-            if (checked == null || checked.getTag() == null) return;
-            int which = (Integer) checked.getTag();
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                    .putLong(PREF_CLIPBOARD_TIMEOUT_MS, values[which]).apply();
-            dialog.dismiss();
-            toast("Clipboard timeout: " + labels[which]);
-        }));
+    @Override
+    public void showMessage(String message) {
+        toast(message);
+    }
 
-        ScreenSecurityManager.protect(dialog);
-        showDialog(dialog);
+    @Override
+    public void onSecuritySettingsClosed() {
+        if (vaultSession.isUnlocked()) showVaultScreen();
+    }
+
+    @Override
+    public void onLockRequested() {
+        lockVault();
     }
 
     private void copyPasswordToClipboard(String password) {
@@ -1551,7 +1185,7 @@ public class MainActivity extends Activity {
 
         LinearLayout indent = new LinearLayout(this);
         indent.setOrientation(LinearLayout.VERTICAL);
-        indent.setPadding(dp(Math.min(depth, HARD_MAX_CATEGORY_DEPTH) * 20), 0, 0, 0);
+        indent.setPadding(dp(Math.min(depth, VaultSecurityPreferences.HARD_MAX_CATEGORY_DEPTH) * 20), 0, 0, 0);
 
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
@@ -1679,7 +1313,7 @@ public class MainActivity extends Activity {
 
         LinearLayout indent = new LinearLayout(this);
         indent.setOrientation(LinearLayout.VERTICAL);
-        indent.setPadding(dp(Math.min(depth, HARD_MAX_CATEGORY_DEPTH + 1) * 20), 0, 0, 0);
+        indent.setPadding(dp(Math.min(depth, VaultSecurityPreferences.HARD_MAX_CATEGORY_DEPTH + 1) * 20), 0, 0, 0);
 
         LinearLayout card = baseVertical(4);
         card.setPadding(dp(12), dp(10), dp(12), dp(10));
@@ -3042,7 +2676,7 @@ public class MainActivity extends Activity {
         if (!vaultSession.isUnlocked() || systemPickerStartedAt <= 0L) return false;
         long timeout = getAutoLockMs();
         long elapsed = System.currentTimeMillis() - systemPickerStartedAt;
-        return timeout == AUTO_LOCK_IMMEDIATELY || elapsed >= timeout;
+        return timeout == VaultSecurityPreferences.AUTO_LOCK_IMMEDIATELY || elapsed >= timeout;
     }
     private void showBackupRestoreDialog() {
         LinearLayout box = baseVertical(8);

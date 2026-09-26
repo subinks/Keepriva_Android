@@ -21,12 +21,9 @@ import android.app.Activity;
 import android.content.Intent;
 
 import androidx.test.espresso.intent.Intents;
-import androidx.test.espresso.intent.matcher.IntentMatchers;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.filters.LargeTest;
 
-import org.junit.After;
-import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -34,20 +31,14 @@ import org.junit.runner.RunWith;
 @LargeTest
 public class KeeprivaDataTransferTest extends KeeprivaTestBase {
 
-    @Before
-    public void initIntents() {
+    @Override
+    protected void beforeActivityLaunch() {
         Intents.init();
     }
 
-    @After
-    public void releaseIntents() {
+    @Override
+    protected void afterActivityClose() {
         Intents.release();
-    }
-
-    private void stubDocumentPicker() {
-        intending(hasAction(Intent.ACTION_CREATE_DOCUMENT))
-                .respondWith(new android.app.Instrumentation.ActivityResult(
-                        Activity.RESULT_CANCELED, null));
     }
 
     @Test
@@ -56,8 +47,13 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
 
         onView(withContentDescription("Import")).perform(scrollTo(), click());
 
-        onView(withContentDescription("Download JSON import template")).check(matches(isDisplayed()));
-        onView(withContentDescription("Import completed JSON template")).check(matches(isDisplayed()));
+        waitForDialogText("Cancel");
+        onView(withContentDescription("Download JSON import template"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
+        onView(withContentDescription("Import completed JSON template"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
     }
 
     @Test
@@ -69,12 +65,16 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
                         Activity.RESULT_CANCELED, null));
 
         onView(withContentDescription("Import")).perform(scrollTo(), click());
-        onView(withContentDescription("Download JSON import template")).perform(click());
+        waitForDialogText("Cancel");
+        onView(withContentDescription("Download JSON import template"))
+                .inRoot(isDialog())
+                .perform(click());
 
         intended(allOf(
                 hasAction(Intent.ACTION_CREATE_DOCUMENT),
                 hasType("application/json")
         ));
+        waitForActivityWindowFocus();
     }
 
     @Test
@@ -86,12 +86,16 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
                         Activity.RESULT_CANCELED, null));
 
         onView(withContentDescription("Import")).perform(scrollTo(), click());
-        onView(withContentDescription("Import completed JSON template")).perform(click());
+        waitForDialogText("Cancel");
+        onView(withContentDescription("Import completed JSON template"))
+                .inRoot(isDialog())
+                .perform(click());
 
         intended(allOf(
                 hasAction(Intent.ACTION_OPEN_DOCUMENT),
                 hasType("application/json")
         ));
+        waitForActivityWindowFocus();
     }
 
     @Test
@@ -100,8 +104,13 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
 
         onView(withContentDescription("Backup & Restore")).perform(scrollTo(), click());
 
-        onView(withText("Create encrypted .pvault backup")).check(matches(isDisplayed()));
-        onView(withText("Restore encrypted .pvault backup")).check(matches(isDisplayed()));
+        waitForDialogText("Cancel");
+        onView(withText("Create encrypted .pvault backup"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
+        onView(withText("Restore encrypted .pvault backup"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
     }
 
     @Test
@@ -109,10 +118,12 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
         createTestVault();
 
         onView(withContentDescription("Backup & Restore")).perform(scrollTo(), click());
+        waitForDialogText("Cancel");
         onView(withText("Create encrypted .pvault backup"))
                 .inRoot(isDialog())
                 .perform(click());
 
+        waitForDialogHint("Backup password (10+ characters)");
         onView(withHint("Backup password (10+ characters)"))
                 .inRoot(isDialog())
                 .perform(replaceText("short"), closeSoftKeyboard());
@@ -134,10 +145,12 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
         createTestVault();
 
         onView(withContentDescription("Backup & Restore")).perform(scrollTo(), click());
+        waitForDialogText("Cancel");
         onView(withText("Create encrypted .pvault backup"))
                 .inRoot(isDialog())
                 .perform(click());
 
+        waitForDialogHint("Backup password (10+ characters)");
         onView(withHint("Backup password (10+ characters)"))
                 .inRoot(isDialog())
                 .perform(replaceText("BackupPass123!"), closeSoftKeyboard());
@@ -163,11 +176,17 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
                         Activity.RESULT_CANCELED, null));
 
         onView(withContentDescription("Backup & Restore")).perform(scrollTo(), click());
-        onView(withText("Create encrypted .pvault backup")).perform(click());
+        waitForDialogText("Cancel");
+        onView(withText("Create encrypted .pvault backup"))
+                .inRoot(isDialog())
+                .perform(click());
 
+        waitForDialogHint("Backup password (10+ characters)");
         onView(withHint("Backup password (10+ characters)"))
+                .inRoot(isDialog())
                 .perform(replaceText("BackupPass123!"), closeSoftKeyboard());
         onView(withHint("Confirm backup password"))
+                .inRoot(isDialog())
                 .perform(replaceText("BackupPass123!"), closeSoftKeyboard());
 
         /*
@@ -186,6 +205,7 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
                 hasAction(Intent.ACTION_CREATE_DOCUMENT),
                 hasType("application/octet-stream")
         ));
+        waitForActivityWindowFocus();
     }
 
     @Test
@@ -197,6 +217,7 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
                         Activity.RESULT_CANCELED, null));
 
         onView(withContentDescription("Backup & Restore")).perform(scrollTo(), click());
+        waitForDialogText("Cancel");
 
         onView(withText("Restore encrypted .pvault backup"))
                 .inRoot(isDialog())
@@ -211,6 +232,7 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
                 .perform(click());
 
         intended(hasAction(Intent.ACTION_OPEN_DOCUMENT));
+        waitForActivityWindowFocus();
     }
 
     @Test
@@ -222,12 +244,24 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
         onView(withContentDescription("Export entry"))
                 .inRoot(isDialog())
                 .perform(scrollTo(), click());
-        onView(withText("Continue")).perform(click());
+        waitForDialogText("Continue");
+        onView(withText("Continue"))
+                .inRoot(isDialog())
+                .perform(click());
 
-        onView(withContentDescription("Export Keepriva JSON")).check(matches(isDisplayed()));
-        onView(withText("Formatted text (.txt)")).check(matches(isDisplayed()));
-        onView(withText("HTML page (.html)")).check(matches(isDisplayed()));
-        onView(withText("PDF document (.pdf)")).check(matches(isDisplayed()));
+        waitForDialogText("Formatted text (.txt)");
+        onView(withContentDescription("Export Keepriva JSON"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
+        onView(withText("Formatted text (.txt)"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
+        onView(withText("HTML page (.html)"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
+        onView(withText("PDF document (.pdf)"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
     }
 
     @Test
@@ -239,11 +273,21 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
         onView(withContentDescription("Export entry"))
                 .inRoot(isDialog())
                 .perform(scrollTo(), click());
-        onView(withText("Include passwords")).perform(click());
-        onView(withText("Continue")).perform(click());
+        waitForDialogText("Include passwords");
+        onView(withText("Include passwords"))
+                .inRoot(isDialog())
+                .perform(click());
+        onView(withText("Continue"))
+                .inRoot(isDialog())
+                .perform(click());
 
-        onView(withHint("Master password")).check(matches(isDisplayed()));
-        onView(withText("Authenticate")).check(matches(isDisplayed()));
+        waitForDialogHint("Master password");
+        onView(withHint("Master password"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
+        onView(withText("Authenticate"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
     }
 
     @Test
@@ -255,14 +299,25 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
         onView(withContentDescription("Export entry"))
                 .inRoot(isDialog())
                 .perform(scrollTo(), click());
-        onView(withText("Include passwords")).perform(click());
-        onView(withText("Continue")).perform(click());
+        waitForDialogText("Include passwords");
+        onView(withText("Include passwords"))
+                .inRoot(isDialog())
+                .perform(click());
+        onView(withText("Continue"))
+                .inRoot(isDialog())
+                .perform(click());
 
+        waitForDialogHint("Master password");
         onView(withHint("Master password"))
+                .inRoot(isDialog())
                 .perform(replaceText("WrongPassword123!"), closeSoftKeyboard());
-        onView(withText("Authenticate")).perform(click());
+        onView(withText("Authenticate"))
+                .inRoot(isDialog())
+                .perform(click());
 
-        onView(withText("Authenticate")).check(matches(isDisplayed()));
+        onView(withText("Authenticate"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
     }
 
     @Test
@@ -274,16 +329,34 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
         onView(withContentDescription("Export entry"))
                 .inRoot(isDialog())
                 .perform(scrollTo(), click());
-        onView(withText("Include passwords")).perform(click());
-        onView(withText("Continue")).perform(click());
+        waitForDialogText("Include passwords");
+        onView(withText("Include passwords"))
+                .inRoot(isDialog())
+                .perform(click());
+        onView(withText("Continue"))
+                .inRoot(isDialog())
+                .perform(click());
 
+        waitForDialogHint("Master password");
         onView(withHint("Master password"))
+                .inRoot(isDialog())
                 .perform(replaceText(TEST_PASSWORD), closeSoftKeyboard());
-        onView(withText("Authenticate")).perform(click());
+        onView(withText("Authenticate"))
+                .inRoot(isDialog())
+                .perform(click());
 
-        onView(withContentDescription("Export Keepriva JSON")).check(matches(isDisplayed()));
-        onView(withText("Formatted text (.txt)")).check(matches(isDisplayed()));
-        onView(withText("HTML page (.html)")).check(matches(isDisplayed()));
-        onView(withText("PDF document (.pdf)")).check(matches(isDisplayed()));
+        waitForDialogText("Formatted text (.txt)");
+        onView(withContentDescription("Export Keepriva JSON"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
+        onView(withText("Formatted text (.txt)"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
+        onView(withText("HTML page (.html)"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
+        onView(withText("PDF document (.pdf)"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
     }
 }

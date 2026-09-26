@@ -39,6 +39,10 @@ capture_diagnostics() {
   adb devices -l > "$OUTPUT_DIR/adb-devices.txt" 2>&1
   adb shell getprop > "$OUTPUT_DIR/device-properties.txt" 2>&1
   adb shell dumpsys activity processes > "$OUTPUT_DIR/activity-processes.txt" 2>&1
+  adb shell dumpsys activity top > "$OUTPUT_DIR/activity-top.txt" 2>&1
+  adb shell dumpsys activity activities > "$OUTPUT_DIR/activity-activities.txt" 2>&1
+  adb shell dumpsys window displays > "$OUTPUT_DIR/window-displays.txt" 2>&1
+  adb shell dumpsys input_method > "$OUTPUT_DIR/input-method.txt" 2>&1
   adb shell dumpsys package "$TARGET_PACKAGE" > "$OUTPUT_DIR/package-dump.txt" 2>&1
   adb exec-out screencap -p > "$OUTPUT_DIR/failure-screen.png" 2>/dev/null
   adb shell uiautomator dump /sdcard/keepriva-failure-ui.xml >/dev/null 2>&1

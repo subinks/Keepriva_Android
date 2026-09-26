@@ -30,6 +30,7 @@ import androidx.test.core.app.ActivityScenario;
 import androidx.test.espresso.UiController;
 import androidx.test.espresso.ViewAction;
 import androidx.test.core.app.ApplicationProvider;
+import androidx.lifecycle.Lifecycle;
 import androidx.test.platform.app.InstrumentationRegistry;
 
 import org.hamcrest.Description;
@@ -49,20 +50,54 @@ public abstract class KeeprivaTestBase {
 
     protected static final String TEST_PASSWORD = "KeeprivaTest123!";
     protected ActivityScenario<MainActivity> scenario;
+    private boolean activityLaunchHookActive;
 
     @Before
     public void baseSetUp() {
         clearAppState();
-        scenario = ActivityScenario.launch(MainActivity.class);
+        beforeActivityLaunch();
+        activityLaunchHookActive = true;
+        try {
+            scenario = ActivityScenario.launch(MainActivity.class);
+            scenario.moveToState(Lifecycle.State.RESUMED);
+            waitForActivityWindowFocus();
+        } catch (RuntimeException | Error failure) {
+            cleanupTestLifecycle();
+            throw failure;
+        }
     }
 
     @After
     public void baseTearDown() {
-        if (scenario != null) {
-            scenario.close();
-            scenario = null;
+        cleanupTestLifecycle();
+    }
+
+    /** Called before MainActivity is launched; intent-aware tests initialize here. */
+    protected void beforeActivityLaunch() {
+        // Default tests do not require additional instrumentation state.
+    }
+
+    /** Called after MainActivity is fully closed; intent-aware tests release here. */
+    protected void afterActivityClose() {
+        // Default tests do not require additional instrumentation state.
+    }
+
+    private void cleanupTestLifecycle() {
+        try {
+            if (scenario != null) {
+                scenario.close();
+                scenario = null;
+            }
+        } finally {
+            try {
+                if (activityLaunchHookActive) {
+                    activityLaunchHookActive = false;
+                    afterActivityClose();
+                }
+            } finally {
+                clearAppState();
+            }
         }
-        clearAppState();
     }
 
     protected void clearAppState() {
@@ -263,7 +298,7 @@ public abstract class KeeprivaTestBase {
             throw new AssertionError("ActivityScenario is not available");
         }
 
-        final long deadline = SystemClock.uptimeMillis() + 5000L;
+        final long deadline = SystemClock.uptimeMillis() + 15000L;
 
         while (SystemClock.uptimeMillis() < deadline) {
             final AtomicBoolean focused = new AtomicBoolean(false);
@@ -287,7 +322,7 @@ public abstract class KeeprivaTestBase {
         }
 
         throw new AssertionError(
-                "MainActivity did not regain stable window focus within 5 seconds");
+                "MainActivity did not reach stable RESUMED window focus within 15 seconds");
     }
     /** Phase 1 security-dialog hardening: wait only on the focused dialog root. */
     protected void waitForDialogText(String text) {

@@ -325,6 +325,66 @@ public class Phase2AArchitectureTest {
                         && source.contains("clearSessionAndControllers(true)"));
     }
 
+    @Test
+    public void dataTransferInstrumentation_enforcesStableFocusLifecycle() throws Exception {
+        String base = readProjectFile(
+                "src/androidTest/java/com/example/privatevault/KeeprivaTestBase.java");
+        String transfer = readProjectFile(
+                "src/androidTest/java/com/example/privatevault/KeeprivaDataTransferTest.java");
+        String runner = readProjectFile("scripts/ci/run-instrumentation-batch.sh");
+
+        assertTrue("Every ActivityScenario launch must reach RESUMED before UI access",
+                base.contains("scenario.moveToState(Lifecycle.State.RESUMED);"));
+        assertTrue("Every ActivityScenario launch must wait for stable window focus",
+                base.contains("scenario.moveToState(Lifecycle.State.RESUMED);\n"
+                        + "            waitForActivityWindowFocus();"));
+        assertTrue("Intent initialization needs a pre-launch hook",
+                base.contains("protected void beforeActivityLaunch()"));
+        assertTrue("Intent release needs a post-close hook",
+                base.contains("protected void afterActivityClose()"));
+        assertTrue("ActivityScenario must close before the post-close hook",
+                base.contains("scenario.close();\n"
+                        + "                scenario = null;")
+                        && base.contains("afterActivityClose();"));
+
+        assertTrue("Data-transfer tests must initialize Intents before launch",
+                transfer.contains("protected void beforeActivityLaunch()")
+                        && transfer.contains("Intents.init();"));
+        assertTrue("Data-transfer tests must release Intents after Activity close",
+                transfer.contains("protected void afterActivityClose()")
+                        && transfer.contains("Intents.release();"));
+        assertFalse("Data-transfer lifecycle belongs to the shared ordered hooks",
+                transfer.contains("org.junit.Before") || transfer.contains("org.junit.After"));
+        assertEquals("Every asserted picker intent must wait for Activity focus to return",
+                occurrences(transfer, "intended("),
+                occurrences(transfer, "waitForActivityWindowFocus();"));
+        assertTrue("Dialog-owned data-transfer controls must pin the dialog root",
+                occurrences(transfer, ".inRoot(isDialog())") >= 45);
+
+        assertTrue("Failure artifacts must capture the focused Activity",
+                runner.contains("dumpsys activity top"));
+        assertTrue("Failure artifacts must capture window focus state",
+                runner.contains("dumpsys window displays"));
+        assertTrue("Failure artifacts must capture input-method state",
+                runner.contains("dumpsys input_method"));
+    }
+
+    private static String readProjectFile(String relativePath) throws Exception {
+        Path path = Paths.get(relativePath);
+        if (!Files.exists(path)) {
+            path = Paths.get("app").resolve(relativePath);
+        }
+        if (!Files.exists(path)) {
+            path = Paths.get("..").resolve(relativePath).normalize();
+        }
+        assertTrue("Required project file is missing: " + relativePath, Files.exists(path));
+        return new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
+    }
+
+    private static int occurrences(String text, String token) {
+        return text.split(java.util.regex.Pattern.quote(token), -1).length - 1;
+    }
+
     private static final class FakeDialog implements DialogRegistry.DialogHandle {
         private final String name;
         private final List<String> order;

@@ -13,8 +13,10 @@ import android.os.Parcelable;
 
 import java.io.Serializable;
 import java.lang.reflect.Modifier;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -305,12 +307,13 @@ public class Phase2AArchitectureTest {
 
     @Test
     public void waveEActivity_keepsOneRootAndNoFeatureDialogConstruction() throws Exception {
-        Path activity = Path.of("src/main/java/com/example/privatevault/MainActivity.java");
+        Path activity = Paths.get("src/main/java/com/example/privatevault/MainActivity.java");
         if (!Files.exists(activity)) {
-            activity = Path.of("app/src/main/java/com/example/privatevault/MainActivity.java");
+            activity = Paths.get("app/src/main/java/com/example/privatevault/MainActivity.java");
         }
-        String source = Files.readString(activity);
-        assertTrue("MainActivity exceeded the Phase 2A limit", source.lines().count() <= 1200);
+        String source = new String(Files.readAllBytes(activity), StandardCharsets.UTF_8);
+        assertTrue("MainActivity exceeded the Phase 2A limit",
+                source.split("\\R", -1).length <= 1200);
         assertEquals("Activity root must be installed once", 1,
                 source.split("setContentView\\(", -1).length - 1);
         assertFalse("Feature dialogs belong to their controllers",

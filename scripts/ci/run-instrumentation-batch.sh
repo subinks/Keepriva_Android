@@ -19,12 +19,12 @@ readonly RAW_OUTPUT="$OUTPUT_DIR/instrumentation-output.txt"
 readonly SUMMARY="$OUTPUT_DIR/summary.txt"
 
 case "$BATCH_ID" in
-  auth-lifecycle-smoke) readonly EXPECTED_TESTS=26 ;;
-  categories) readonly EXPECTED_TESTS=24 ;;
+  auth-lifecycle-smoke) readonly EXPECTED_TESTS=32 ;;
+  categories) readonly EXPECTED_TESTS=25 ;;
   item-core) readonly EXPECTED_TESTS=14 ;;
   data-transfer) readonly EXPECTED_TESTS=12 ;;
   security) readonly EXPECTED_TESTS=12 ;;
-  serial-safety-net) readonly EXPECTED_TESTS=88 ;;
+  serial-safety-net) readonly EXPECTED_TESTS=95 ;;
   *)
     echo "ERROR: unknown instrumentation batch '$BATCH_ID'." >&2
     exit 64
@@ -39,6 +39,10 @@ capture_diagnostics() {
   adb devices -l > "$OUTPUT_DIR/adb-devices.txt" 2>&1
   adb shell getprop > "$OUTPUT_DIR/device-properties.txt" 2>&1
   adb shell dumpsys activity processes > "$OUTPUT_DIR/activity-processes.txt" 2>&1
+  adb shell dumpsys activity top > "$OUTPUT_DIR/activity-top.txt" 2>&1
+  adb shell dumpsys activity activities > "$OUTPUT_DIR/activity-activities.txt" 2>&1
+  adb shell dumpsys window displays > "$OUTPUT_DIR/window-displays.txt" 2>&1
+  adb shell dumpsys input_method > "$OUTPUT_DIR/input-method.txt" 2>&1
   adb shell dumpsys package "$TARGET_PACKAGE" > "$OUTPUT_DIR/package-dump.txt" 2>&1
   adb exec-out screencap -p > "$OUTPUT_DIR/failure-screen.png" 2>/dev/null
   adb shell uiautomator dump /sdcard/keepriva-failure-ui.xml >/dev/null 2>&1

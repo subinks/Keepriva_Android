@@ -139,6 +139,18 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
     }
 
     @Test
+    public void preferencesDialog_showsKeeprivaOwnerDetails() {
+        createTestVault();
+        onView(withText("Preferences")).perform(scrollTo(), click());
+
+        onView(allOf(
+                withContentDescription("Keepriva owner information"),
+                withText("Owner: Subin K S\nEmail: kssubin@gmail.com")))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
+    }
+
+    @Test
     public void preferencesRejectsDepthZero() {
         createTestVault();
         onView(withText("Preferences")).perform(scrollTo(), click());

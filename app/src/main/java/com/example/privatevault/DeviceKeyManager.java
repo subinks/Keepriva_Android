@@ -51,6 +51,7 @@ public final class DeviceKeyManager {
      * Creates a per-use-authentication AES-256 key if it does not already exist.
      * No plaintext key bytes ever leave Android Keystore.
      */
+    @SuppressWarnings("deprecation") // Required only for the API 28-29 per-use authentication path.
     public static void ensureAuthenticationBoundKey() throws GeneralSecurityException {
         if (!isSupported() || containsKey()) return;
         try {

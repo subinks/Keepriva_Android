@@ -230,7 +230,7 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
                 .inRoot(isDialog())
                 .perform(click());
 
-        onView(withText("Keep Me"))
+        onView(withContentDescription("Open entry Keep Me"))
                 .perform(scrollTo())
                 .check(matches(isDisplayed()));
     }

@@ -276,7 +276,15 @@ jobs:
 
   serial-safety-net:
     name: Full serial safety net
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    # The workflow is not present on the repository default branch, so GitHub
+    # does not expose its workflow_dispatch button. A marker on the pushed
+    # branch head provides a controlled milestone trigger without making the
+    # expensive serial suite part of every push.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' ||
+      (github.event_name == 'push' &&
+      contains(github.event.head_commit.message, '[serial-safety-net]'))
     needs: build-apks
     runs-on: ubuntu-latest
     timeout-minutes: 28
@@ -358,13 +366,23 @@ jobs:
           INSTRUMENTATION_RESULT: ${{ needs.instrumentation.result }}
           VISUAL_RESULT: ${{ needs.visual-verification.result }}
           SERIAL_RESULT: ${{ needs.serial-safety-net.result }}
+          SERIAL_REQUIRED: >-
+            ${{ github.event_name == 'workflow_dispatch' ||
+            github.event_name == 'schedule' ||
+            (github.event_name == 'push' &&
+            contains(github.event.head_commit.message, '[serial-safety-net]')) }}
         run: |
           set -euo pipefail
           echo "build-apks=$BUILD_RESULT"
           echo "instrumentation=$INSTRUMENTATION_RESULT"
           echo "visual-verification=$VISUAL_RESULT"
           echo "serial-safety-net=$SERIAL_RESULT"
+          echo "serial-required=$SERIAL_REQUIRED"
           test "$BUILD_RESULT" = "success"
           test "$INSTRUMENTATION_RESULT" = "success"
           test "$VISUAL_RESULT" = "success"
-          test "$SERIAL_RESULT" = "success" || test "$SERIAL_RESULT" = "skipped"
+          if [ "$SERIAL_REQUIRED" = "true" ]; then
+            test "$SERIAL_RESULT" = "success"
+          else
+            test "$SERIAL_RESULT" = "success" || test "$SERIAL_RESULT" = "skipped"
+          fi

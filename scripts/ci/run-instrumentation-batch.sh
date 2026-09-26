@@ -20,11 +20,11 @@ readonly SUMMARY="$OUTPUT_DIR/summary.txt"
 
 case "$BATCH_ID" in
   auth-lifecycle-smoke) readonly EXPECTED_TESTS=32 ;;
-  categories) readonly EXPECTED_TESTS=24 ;;
+  categories) readonly EXPECTED_TESTS=25 ;;
   item-core) readonly EXPECTED_TESTS=14 ;;
   data-transfer) readonly EXPECTED_TESTS=12 ;;
   security) readonly EXPECTED_TESTS=12 ;;
-  serial-safety-net) readonly EXPECTED_TESTS=94 ;;
+  serial-safety-net) readonly EXPECTED_TESTS=95 ;;
   *)
     echo "ERROR: unknown instrumentation batch '$BATCH_ID'." >&2
     exit 64

@@ -57,6 +57,12 @@ final class SecuritySettingsController implements VaultController {
         root.addView(views.subtitle("Default: 3. Hard maximum: 5. Root categories count as level 1."));
         enableEdit.setOnCheckedChangeListener((buttonView, checked) -> depth.setEnabled(checked));
 
+        root.addView(views.boldLabel("About Keepriva"));
+        TextView owner = views.subtitle("Owner: Subin K S\nEmail: kssubin@gmail.com");
+        owner.setContentDescription("Keepriva owner information");
+        owner.setTextIsSelectable(true);
+        root.addView(owner);
+
         AlertDialog dialog = new AlertDialog.Builder(activity)
                 .setTitle("Preferences")
                 .setView(root)

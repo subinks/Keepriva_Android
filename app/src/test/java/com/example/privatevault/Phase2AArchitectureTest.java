@@ -173,6 +173,7 @@ public class Phase2AArchitectureTest {
                 SetupController.class,
                 UnlockController.class,
                 SecuritySettingsController.class,
+                CategoryManagementController.class,
                 VaultSecurityPreferences.class
         };
 
@@ -232,6 +233,27 @@ public class Phase2AArchitectureTest {
             assertFalse("Browser controller must not own Bundle state",
                     Bundle.class.isAssignableFrom(field.getType()));
             assertFalse("Browser controller must not own Parcelable state",
+                    Parcelable.class.isAssignableFrom(field.getType()));
+        });
+    }
+
+    @Test
+    public void waveC2CategoryManagement_usesLifecycleAndNarrowHostContracts() {
+        assertTrue(VaultController.class.isAssignableFrom(CategoryManagementController.class));
+        assertTrue(CategoryManagementController.Gateway.class.isAssignableFrom(MainActivity.class));
+        assertTrue(CategoryManagementActions.class.isAssignableFrom(MainActivity.class));
+
+        Arrays.stream(CategoryManagementController.class.getDeclaredFields()).forEach(field -> {
+            if (Modifier.isStatic(field.getModifiers())) return;
+            assertFalse("Category controller must not own SecretKey",
+                    SecretKey.class.isAssignableFrom(field.getType()));
+            assertFalse("Category controller must not own decrypted VaultItem",
+                    VaultItem.class.isAssignableFrom(field.getType()));
+            assertFalse("Category controller must not own byte arrays",
+                    field.getType().equals(byte[].class));
+            assertFalse("Category controller must not own Bundle state",
+                    Bundle.class.isAssignableFrom(field.getType()));
+            assertFalse("Category controller must not own Parcelable state",
                     Parcelable.class.isAssignableFrom(field.getType()));
         });
     }

@@ -115,6 +115,19 @@ public class VaultBrowserViewStateBuilderTest {
         assertEquals(VaultBrowserViewState.EmptyState.NO_DIRECT_ITEMS, emptyBranch.emptyState());
     }
 
+    @Test
+    public void removedSelectedCategoryFallsBackToRoot() {
+        VaultBrowserViewState state = build(
+                "Deleted category",
+                Collections.emptyList(),
+                Collections.emptyList(),
+                Collections.singletonList("Login"));
+
+        assertEquals("All", state.currentCategory());
+        assertEquals("Keepriva", state.title());
+        assertEquals(Collections.singletonList("Login"), names(state.subcategories()));
+    }
+
     private VaultBrowserViewState build(
             String category,
             List<VaultItem> items,

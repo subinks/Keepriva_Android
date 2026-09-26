@@ -22,6 +22,10 @@ final class VaultBrowserViewStateBuilder {
         List<String> safeBuiltIns =
                 activeBuiltIns == null ? Collections.emptyList() : activeBuiltIns;
         if (hierarchy == null) throw new IllegalArgumentException("hierarchy is required");
+        if (!isRoot(currentCategory)
+                && !categoryExists(currentCategory, safeCategories, safeBuiltIns)) {
+            currentCategory = "All";
+        }
 
         List<CategoryRowModel> subcategories = new ArrayList<>();
         if (isRoot(currentCategory)) {
@@ -109,6 +113,19 @@ final class VaultBrowserViewStateBuilder {
 
     private static boolean isRoot(String categoryName) {
         return "All".equalsIgnoreCase(safe(categoryName).trim());
+    }
+
+    private static boolean categoryExists(
+            String categoryName,
+            List<CustomCategory> categories,
+            List<String> activeBuiltIns) {
+        for (String builtIn : activeBuiltIns) {
+            if (safe(builtIn).trim().equalsIgnoreCase(categoryName)) return true;
+        }
+        for (CustomCategory category : categories) {
+            if (safe(category.name).trim().equalsIgnoreCase(categoryName)) return true;
+        }
+        return false;
     }
 
     private static String safe(String value) {

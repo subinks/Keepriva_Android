@@ -224,11 +224,11 @@ public class Phase2AArchitectureTest {
 
     @Test
     public void waveC1Browser_usesLifecycleAndNarrowHostContracts() {
-        assertTrue(VaultController.class.isAssignableFrom(LegacyVaultBrowserController.class));
-        assertTrue(LegacyVaultBrowserController.DataSource.class.isAssignableFrom(MainActivity.class));
+        assertTrue(VaultController.class.isAssignableFrom(VaultBrowserController.class));
+        assertTrue(VaultBrowserController.DataSource.class.isAssignableFrom(MainActivity.class));
         assertTrue(VaultBrowserActions.class.isAssignableFrom(MainActivity.class));
 
-        Arrays.stream(LegacyVaultBrowserController.class.getDeclaredFields()).forEach(field -> {
+        Arrays.stream(VaultBrowserController.class.getDeclaredFields()).forEach(field -> {
             if (Modifier.isStatic(field.getModifiers())) return;
             assertFalse("Browser controller must not own SecretKey",
                     SecretKey.class.isAssignableFrom(field.getType()));

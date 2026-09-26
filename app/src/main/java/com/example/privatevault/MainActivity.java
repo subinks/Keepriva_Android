@@ -39,7 +39,7 @@ public class MainActivity extends Activity implements
         UnlockActions,
         SecuritySettingsController.Gateway,
         SecuritySettingsActions,
-        LegacyVaultBrowserController.DataSource,
+        VaultBrowserController.DataSource,
         VaultBrowserActions,
         CategoryManagementController.Gateway,
         CategoryManagementActions,
@@ -80,7 +80,7 @@ public class MainActivity extends Activity implements
     private SetupController setupController;
     private UnlockController unlockController;
     private SecuritySettingsController securitySettingsController;
-    private LegacyVaultBrowserController browserController;
+    private VaultBrowserController browserController;
     private CategoryManagementController categoryManagementController;
     private ItemDialogController itemDialogController;
     private DataTransferController dataTransferController;
@@ -129,7 +129,7 @@ public class MainActivity extends Activity implements
         securitySettingsController = controllerRegistry.register(new SecuritySettingsController(
                 this, viewFactory, dialogRegistry, securityPreferences, this, this));
         browserController = controllerRegistry.register(
-                new LegacyVaultBrowserController(this, viewFactory, this, this));
+                new VaultBrowserController(this, this, this));
         categoryManagementController = controllerRegistry.register(
                 new CategoryManagementController(
                         this, viewFactory, dialogRegistry, categoryHierarchy, this, this));
@@ -712,11 +712,22 @@ public class MainActivity extends Activity implements
         VaultNavigationState browserState = VaultNavigationState.vaultBrowser(
                 selectedHomeCategory, "", 0);
         screenRouter.reset(browserState);
+        browserController.selectCategory(selectedHomeCategory, false);
         renderRootScreen(browserController.createView(), browserState);
     }
 
     @Override
-    public VaultBrowserModel browserModel(String query) {
+    public VaultBrowserViewState browserState(String categoryName) {
+        return VaultBrowserViewStateBuilder.build(
+                categoryName,
+                allItems,
+                customCategories,
+                activeBuiltInCategories(),
+                categoryHierarchy);
+    }
+
+    @Override
+    public VaultBrowserModel compatibilitySearchModel(String query) {
         return VaultBrowserModelBuilder.build(
                 query, allItems, customCategories, activeBuiltInCategories());
     }

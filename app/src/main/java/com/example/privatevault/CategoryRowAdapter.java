@@ -74,12 +74,15 @@ public final class CategoryRowAdapter
         }
 
         void bind(CategoryRowModel row, Listener listener) {
-            icon.setImageResource(R.drawable.ic_keepriva_folder);
+            icon.setImageResource(iconFor(row.iconFamily));
+            icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+            icon.setContentDescription("Category icon " + row.iconFamily);
             title.setText(row.label);
-            summary.setText(row.entryCount + (row.entryCount == 1 ? " entry" : " entries"));
+            summary.setText((row.depth <= 1 ? "Category" : "Subcategory") + " • "
+                    + row.entryCount + (row.entryCount == 1 ? " entry" : " entries"));
             indicator.setText(row.expanded ? "⌄" : "›");
             itemView.setPadding(
-                    UiStyle.dp(itemView.getContext(), 12 + Math.min(row.depth, 5) * 20),
+                    UiStyle.dp(itemView.getContext(), 12),
                     UiStyle.dp(itemView.getContext(), 10),
                     UiStyle.dp(itemView.getContext(), 8),
                     UiStyle.dp(itemView.getContext(), 10));
@@ -89,6 +92,21 @@ public final class CategoryRowAdapter
                 if (listener != null) listener.onCategorySelected(row);
             });
         }
+
+        private static int iconFor(String family) {
+            switch (family) {
+                case "All": return R.drawable.ic_keepriva_folder;
+                case "Login": return R.drawable.ic_keepriva_key;
+                case "Website": return R.drawable.ic_keepriva_website;
+                case "App": return R.drawable.ic_keepriva_app;
+                case "Contact": return R.drawable.ic_keepriva_contact;
+                case "Banking": return R.drawable.ic_keepriva_card;
+                case "Work": return R.drawable.ic_keepriva_work;
+                case "Personal": return R.drawable.ic_keepriva_personal;
+                case "Secure Note": return R.drawable.ic_keepriva_note;
+                case "Other": return R.drawable.ic_keepriva_other;
+                default: return R.drawable.ic_keepriva_custom;
+            }
+        }
     }
 }
-

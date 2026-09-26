@@ -175,6 +175,7 @@ public class Phase2AArchitectureTest {
                 SecuritySettingsController.class,
                 CategoryManagementController.class,
                 ItemDialogController.class,
+                DataTransferController.class,
                 VaultSecurityPreferences.class
         };
 
@@ -277,6 +278,26 @@ public class Phase2AArchitectureTest {
                     Bundle.class.isAssignableFrom(field.getType()));
             assertFalse("Item controller must not own Parcelable state",
                     Parcelable.class.isAssignableFrom(field.getType()));
+        });
+    }
+
+    @Test
+    public void waveDTransfer_usesLifecycleAndTypedPickerContracts() {
+        assertTrue(VaultController.class.isAssignableFrom(DataTransferController.class));
+        assertTrue(DataTransferController.Gateway.class.isAssignableFrom(MainActivity.class));
+        assertTrue(DataTransferActions.class.isAssignableFrom(MainActivity.class));
+        Arrays.stream(DataTransferController.class.getDeclaredFields()).forEach(field -> {
+            if (Modifier.isStatic(field.getModifiers())) return;
+            assertFalse("Transfer controller must not retain raw bytes", field.getType().equals(byte[].class));
+            assertFalse("Transfer controller must not retain a key",
+                    SecretKey.class.isAssignableFrom(field.getType()));
+            assertFalse("Transfer controller must not retain an item",
+                    VaultItem.class.isAssignableFrom(field.getType()));
+        });
+        Arrays.stream(ActivityResultCoordinator.class.getDeclaredFields()).forEach(field -> {
+            if (Modifier.isStatic(field.getModifiers()) || field.isSynthetic()) return;
+            assertTrue("Picker coordinator contains only an operation or timestamp",
+                    field.getType() == TransferOperation.class || field.getType() == long.class);
         });
     }
 

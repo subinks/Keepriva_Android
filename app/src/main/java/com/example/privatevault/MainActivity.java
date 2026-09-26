@@ -58,6 +58,8 @@ public class MainActivity extends Activity implements
         VaultBrowserActions,
         CategoryManagementController.Gateway,
         CategoryManagementActions,
+        DataTransferController.Gateway,
+        DataTransferActions,
         ItemDialogController.Gateway,
         ItemDialogActions {
     private static final String PREFS = "vault_config";
@@ -79,11 +81,6 @@ public class MainActivity extends Activity implements
     private static final String PREF_BIOMETRIC_WRAPPED_VAULT_KEY = "biometric_wrapped_vault_key_v1";
     private static final String PREF_BIOMETRIC_IV = "biometric_wrapped_vault_key_iv_v1";
     private static final String[] BUILT_IN_CATEGORIES = {"Login", "Website", "App", "Contact", "Banking", "Work", "Personal", "Secure Note", "Other"};
-    private static final int EXPORT_REQUEST = 7001;
-    private static final int TEMPLATE_EXPORT_REQUEST = 7002;
-    private static final int IMPORT_REQUEST = 7003;
-    private static final int BACKUP_EXPORT_REQUEST = 7004;
-    private static final int BACKUP_RESTORE_REQUEST = 7005;
 
     private final VaultSessionCoordinator vaultSession = new VaultSessionCoordinator();
     private final CategoryHierarchyService categoryHierarchy =
@@ -101,21 +98,17 @@ public class MainActivity extends Activity implements
     private LegacyVaultBrowserController browserController;
     private CategoryManagementController categoryManagementController;
     private ItemDialogController itemDialogController;
+    private DataTransferController dataTransferController;
+    private final ActivityResultCoordinator activityResults = new ActivityResultCoordinator();
     private final VaultScreenRouter screenRouter = new VaultScreenRouter();
     private String selectedHomeCategory = "All";
     private List<VaultItem> allItems = new ArrayList<>();
     private List<CustomCategory> customCategories = new ArrayList<>();
-    private byte[] pendingExportBytes;
-    private String pendingExportMime;
-    private byte[] pendingTemplateBytes;
-    private byte[] pendingBackupBytes;
     private long backgroundAt = 0L;
     private boolean explicitlyLocked = true;
     private ClipboardSecurityManager clipboardSecurity;
     // PBKDF2 deliberately uses a high work factor; never derive on the UI thread.
     private final ExecutorService unlockExecutor = Executors.newSingleThreadExecutor();
-    private boolean systemPickerInProgress = false;
-    private long systemPickerStartedAt = 0L;
     private boolean screenOffReceiverRegistered = false;
     private final BroadcastReceiver screenOffReceiver = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) {
@@ -149,6 +142,8 @@ public class MainActivity extends Activity implements
                         this, viewFactory, dialogRegistry, categoryHierarchy, this, this));
         itemDialogController = controllerRegistry.register(
                 new ItemDialogController(this, viewFactory, dialogRegistry, this, this));
+        dataTransferController = controllerRegistry.register(
+                new DataTransferController(this, viewFactory, dialogRegistry, this, this));
         database = new VaultDatabase(this);
         clipboardSecurity = new ClipboardSecurityManager(this);
         registerScreenOffReceiver();
@@ -178,7 +173,7 @@ public class MainActivity extends Activity implements
     @Override
     protected void onStart() {
         super.onStart();
-        if (vaultSession.isUnlocked() && backgroundAt > 0 && !systemPickerInProgress) {
+        if (vaultSession.isUnlocked() && backgroundAt > 0 && !activityResults.isPickerInProgress()) {
             long timeout = getAutoLockMs();
             if (timeout == VaultSecurityPreferences.AUTO_LOCK_IMMEDIATELY
                     || System.currentTimeMillis() - backgroundAt >= timeout) {
@@ -364,6 +359,16 @@ public class MainActivity extends Activity implements
      * permanent vault data key and is wrapped by a new master-password KEK. No record is
      * rewritten, so an interrupted upgrade cannot leave a partially re-encrypted database.
      */
+    private SecretKey unlockLegacyForVerification(String password, SharedPreferences prefs) throws Exception {
+        byte[] salt = Base64.decode(prefs.getString(PREF_LEGACY_SALT, ""), Base64.NO_WRAP);
+        try {
+            SecretKey key = CryptoManager.deriveLegacyKey(password.toCharArray(), salt);
+            String verifier = CryptoManager.decrypt(key, prefs.getString(PREF_LEGACY_VERIFIER, ""));
+            if (!LEGACY_VERIFIER_TEXT.equals(verifier)) throw new GeneralSecurityException("Wrong password");
+            return key;
+        } finally { java.util.Arrays.fill(salt, (byte) 0); }
+    }
+
     private SecretKey unlockLegacyAndMigrate(String password, SharedPreferences prefs) throws Exception {
         byte[] legacySalt = Base64.decode(prefs.getString(PREF_LEGACY_SALT, ""), Base64.NO_WRAP);
         try {
@@ -717,11 +722,8 @@ public class MainActivity extends Activity implements
         customCategories.clear();
         if (browserController != null) browserController.clearSessionState();
         selectedHomeCategory = "All";
-        clearPendingExportData();
-        clearPendingTemplateData();
-        clearPendingBackupData();
-        systemPickerInProgress = false;
-        systemPickerStartedAt = 0L;
+        if (dataTransferController != null) dataTransferController.clearSessionState();
+        activityResults.clear();
     }
     private void showVaultScreen() {
         if (!vaultSession.isUnlocked()) {
@@ -777,18 +779,18 @@ public class MainActivity extends Activity implements
 
     @Override
     public void onImportRequested() {
-        showImportDialog();
+        dataTransferController.showImportDialog();
     }
 
     @Override
     public void onExportRequested(String categoryName) {
         selectedHomeCategory = safe(categoryName).isEmpty() ? "All" : categoryName;
-        exportSelectedCategory();
+        dataTransferController.exportCategory(selectedHomeCategory);
     }
 
     @Override
     public void onBackupRestoreRequested() {
-        showBackupRestoreDialog();
+        dataTransferController.showBackupRestoreDialog();
     }
 
     @Override
@@ -940,608 +942,6 @@ public class MainActivity extends Activity implements
                 .apply();
     }
 
-    private void exportSelectedCategory() {
-        String category = safe(selectedHomeCategory).isEmpty() ? "All" : selectedHomeCategory;
-        List<VaultItem> selected = new ArrayList<>();
-        for (VaultItem item : allItems) if ("All".equals(category) || isDescendantOf(item.category, category)) selected.add(item);
-        if (selected.isEmpty()) { toast("There are no entries to export in this category."); return; }
-        showExportFormatChooser(selected, "All".equals(category) ? "Keepriva" : category);
-    }
-
-    private void showExportFormatChooser(List<VaultItem> items, String suggestedName) {
-        LinearLayout box = baseVertical(8);
-        TextView warning = subtitle("TXT, HTML, PDF and JSON exports are readable plaintext files. JSON is structured and can be imported back into Keepriva. By default Keepriva omits passwords and custom fields marked sensitive.");
-        CheckBox includePasswords = new CheckBox(this);
-        includePasswords.setText("Include passwords");
-        includePasswords.setChecked(false);
-        CheckBox includeSensitive = new CheckBox(this);
-        includeSensitive.setText("Include sensitive custom fields");
-        includeSensitive.setChecked(false);
-        box.addView(warning); box.addView(includePasswords); box.addView(includeSensitive);
-
-        showDialog(new AlertDialog.Builder(this)
-                .setTitle("Export security")
-                .setView(box)
-                .setPositiveButton("Continue", (d, w) -> {
-                    boolean sensitiveExport = includePasswords.isChecked() || includeSensitive.isChecked();
-                    ExportManager.Options options = new ExportManager.Options(
-                            includePasswords.isChecked(), includeSensitive.isChecked(), sensitiveCustomFieldsByCategory());
-                    if (sensitiveExport) {
-                        requireMasterPasswordForSensitiveExport(items, suggestedName, options);
-                    } else {
-                        chooseExportFormat(items, suggestedName, options);
-                    }
-                })
-                .setNegativeButton("Cancel", null)
-                .create());
-    }
-
-    private Map<String, java.util.Set<String>> sensitiveCustomFieldsByCategory() {
-        Map<String, java.util.Set<String>> result = new LinkedHashMap<>();
-        for (CustomCategory c : customCategories) {
-            result.put(safe(c.name), new java.util.HashSet<>(c.sensitiveFields));
-        }
-        return result;
-    }
-
-    private void requireMasterPasswordForSensitiveExport(List<VaultItem> items, String suggestedName,
-                                                         ExportManager.Options options) {
-        EditText password = passwordField("Master password");
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("Re-authentication required")
-                .setMessage("This export can contain passwords or fields you marked sensitive. Enter the master password again before creating the plaintext file.")
-                .setView(password)
-                .setPositiveButton("Authenticate", null)
-                .setNegativeButton("Cancel", null)
-                .create();
-
-        dialog.setOnShowListener(v -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(btn -> {
-            char[] chars = password.getText().toString().toCharArray();
-            try {
-                SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
-                SecretKey verified = prefs.getInt(PREF_CRYPTO_VERSION, 0) >= CRYPTO_VERSION_2
-                        ? unlockV2(new String(chars), prefs)
-                        : unlockLegacyForVerification(new String(chars), prefs);
-                if (verified == null) throw new GeneralSecurityException("Authentication failed");
-                dialog.dismiss();
-                chooseExportFormat(items, suggestedName, options);
-            } catch (Exception e) {
-                password.setError("Incorrect master password");
-                password.requestFocus();
-            } finally {
-                java.util.Arrays.fill(chars, '\0');
-                password.setText("");
-            }
-        }));
-
-        ScreenSecurityManager.protect(dialog);
-        showDialog(dialog);
-    }
-
-    private SecretKey unlockLegacyForVerification(String password, SharedPreferences prefs) throws Exception {
-        byte[] salt = Base64.decode(prefs.getString(PREF_LEGACY_SALT, ""), Base64.NO_WRAP);
-        try {
-            SecretKey key = CryptoManager.deriveLegacyKey(password.toCharArray(), salt);
-            String verifier = CryptoManager.decrypt(key, prefs.getString(PREF_LEGACY_VERIFIER, ""));
-            if (!LEGACY_VERIFIER_TEXT.equals(verifier)) throw new GeneralSecurityException("Wrong password");
-            return key;
-        } finally { java.util.Arrays.fill(salt, (byte) 0); }
-    }
-
-    private void chooseExportFormat(List<VaultItem> items, String suggestedName, ExportManager.Options options) {
-        LinearLayout box = baseVertical(8);
-
-        TextView warning = subtitle(
-                options.includePasswords || options.includeSensitiveCustomFields
-                        ? "Sensitive values are enabled for this plaintext export. Store the file securely and delete it when no longer needed."
-                        : "Safe export: passwords and sensitive custom fields will be omitted.");
-        box.addView(warning);
-
-        Button json = primaryButton("Keepriva JSON (.json) — re-importable");
-        json.setContentDescription("Export Keepriva JSON");
-        Button txt = button("Formatted text (.txt)");
-        Button html = button("HTML page (.html)");
-        Button pdf = button("PDF document (.pdf)");
-
-        box.addView(json, matchWidth());
-        box.addView(txt, matchWidth());
-        box.addView(html, matchWidth());
-        box.addView(pdf, matchWidth());
-
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("Choose export format")
-                .setView(box)
-                .setNegativeButton("Cancel", null)
-                .create();
-
-        json.setOnClickListener(v -> {
-            dialog.dismiss();
-            prepareExport(items, suggestedName, 3, options);
-        });
-        txt.setOnClickListener(v -> {
-            dialog.dismiss();
-            prepareExport(items, suggestedName, 0, options);
-        });
-        html.setOnClickListener(v -> {
-            dialog.dismiss();
-            prepareExport(items, suggestedName, 1, options);
-        });
-        pdf.setOnClickListener(v -> {
-            dialog.dismiss();
-            prepareExport(items, suggestedName, 2, options);
-        });
-
-        ScreenSecurityManager.protect(dialog);
-        showDialog(dialog);
-    }
-
-    private void prepareExport(List<VaultItem> items, String suggestedName, int format, ExportManager.Options options) {
-        try {
-            String base = sanitizeFileName(suggestedName);
-            String filename;
-
-            if (format == 0) {
-                pendingExportBytes = ExportManager.toText(items, options).getBytes(StandardCharsets.UTF_8);
-                pendingExportMime = "text/plain";
-                filename = base + ".txt";
-            } else if (format == 1) {
-                pendingExportBytes = ExportManager.toHtml(items, options).getBytes(StandardCharsets.UTF_8);
-                pendingExportMime = "text/html";
-                filename = base + ".html";
-            } else if (format == 2) {
-                pendingExportBytes = ExportManager.toPdf(items, options);
-                pendingExportMime = "application/pdf";
-                filename = base + ".pdf";
-            } else {
-                pendingExportBytes = ExportManager
-                        .toImportCompatibleJson(items, options, customCategories)
-                        .getBytes(StandardCharsets.UTF_8);
-                pendingExportMime = "application/json";
-                filename = base + ".json";
-            }
-
-            Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
-            intent.addCategory(Intent.CATEGORY_OPENABLE);
-            intent.setType(pendingExportMime);
-            intent.putExtra(Intent.EXTRA_TITLE, filename);
-            beginSystemPicker();
-            startActivityForResult(intent, EXPORT_REQUEST);
-        } catch (Exception e) {
-            toast("Could not prepare export: " + e.getMessage());
-        }
-    }
-
-    private void beginSystemPicker() {
-        systemPickerInProgress = true;
-        systemPickerStartedAt = System.currentTimeMillis();
-    }
-
-    private void clearPendingExportData() {
-        if (pendingExportBytes != null) java.util.Arrays.fill(pendingExportBytes, (byte) 0);
-        pendingExportBytes = null;
-        pendingExportMime = null;
-    }
-
-    private void clearPendingTemplateData() {
-        if (pendingTemplateBytes != null) java.util.Arrays.fill(pendingTemplateBytes, (byte) 0);
-        pendingTemplateBytes = null;
-    }
-
-    private void clearPendingBackupData() {
-        if (pendingBackupBytes != null) java.util.Arrays.fill(pendingBackupBytes, (byte) 0);
-        pendingBackupBytes = null;
-    }
-
-    private boolean shouldLockAfterPicker() {
-        if (!vaultSession.isUnlocked() || systemPickerStartedAt <= 0L) return false;
-        long timeout = getAutoLockMs();
-        long elapsed = System.currentTimeMillis() - systemPickerStartedAt;
-        return timeout == VaultSecurityPreferences.AUTO_LOCK_IMMEDIATELY || elapsed >= timeout;
-    }
-    private void showBackupRestoreDialog() {
-        LinearLayout box = baseVertical(8);
-        box.addView(subtitle("Backups use a separate password and are portable to another phone. Keep the backup password safe: it is not recoverable by the app."));
-
-        Button create = button("Create encrypted .pvault backup");
-        Button restore = button("Restore encrypted .pvault backup");
-        box.addView(create, matchWidth());
-        box.addView(restore, matchWidth());
-
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("Encrypted backup & restore")
-                .setView(box)
-                .setNegativeButton("Cancel", null)
-                .create();
-
-        create.setOnClickListener(v -> {
-            dialog.dismiss();
-            promptCreateBackupPassword();
-        });
-        restore.setOnClickListener(v -> {
-            dialog.dismiss();
-            chooseBackupForRestore();
-        });
-
-        ScreenSecurityManager.protect(dialog);
-        showDialog(dialog);
-    }
-
-    private void promptCreateBackupPassword() {
-        LinearLayout box = baseVertical(8);
-        box.addView(subtitle("Use a password different from your phone unlock. The .pvault file contains an authenticated encrypted snapshot of entries and custom categories."));
-        EditText pass = passwordField("Backup password (10+ characters)");
-        EditText confirm = passwordField("Confirm backup password");
-        box.addView(pass);
-        box.addView(confirm);
-
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("Create encrypted backup")
-                .setView(box)
-                .setPositiveButton("Continue", null)
-                .setNegativeButton("Cancel", null)
-                .create();
-
-        dialog.setOnShowListener(v -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(btn -> {
-            char[] p1 = pass.getText().toString().toCharArray();
-            char[] p2 = confirm.getText().toString().toCharArray();
-            try {
-                if (p1.length < 10) {
-                    pass.setError("Use at least 10 characters");
-                    pass.requestFocus();
-                    return;
-                }
-                if (!java.util.Arrays.equals(p1, p2)) {
-                    confirm.setError("Passwords do not match");
-                    confirm.requestFocus();
-                    return;
-                }
-                dialog.dismiss();
-                createEncryptedBackup(p1);
-            } finally {
-                java.util.Arrays.fill(p1, '\0');
-                java.util.Arrays.fill(p2, '\0');
-                pass.setText("");
-                confirm.setText("");
-            }
-        }));
-
-        ScreenSecurityManager.protect(dialog);
-        showDialog(dialog);
-    }
-
-    private void createEncryptedBackup(char[] backupPassword) {
-        try {
-            // Reload from the database so the backup is a complete authoritative snapshot.
-            List<CustomCategory> categories = database.listCustomCategories(vaultSession.requireKey());
-            List<VaultItem> items = database.list(vaultSession.requireKey());
-            pendingBackupBytes = BackupManager.createBackup(
-                    categories, items, backupPassword, database.currentSchemaVersion());
-            Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
-            intent.addCategory(Intent.CATEGORY_OPENABLE);
-            intent.setType("application/octet-stream");
-            intent.putExtra(Intent.EXTRA_TITLE, "Keepriva-backup.pvault");
-            beginSystemPicker();
-            startActivityForResult(intent, BACKUP_EXPORT_REQUEST);
-        } catch (Exception e) {
-            pendingBackupBytes = null;
-            toast("Could not create backup: " + e.getMessage());
-        }
-    }
-
-    private void chooseBackupForRestore() {
-        showDialog(new AlertDialog.Builder(this)
-                .setTitle("Restore encrypted backup")
-                .setMessage("Restore replaces the current vault entries and custom categories only after the selected backup has been decrypted and validated. Your current master password and biometric settings are kept.")
-                .setPositiveButton("Choose .pvault file", (d, w) -> {
-                    Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-                    intent.addCategory(Intent.CATEGORY_OPENABLE);
-                    intent.setType("*/*");
-                    systemPickerInProgress = true;
-                    startActivityForResult(intent, BACKUP_RESTORE_REQUEST);
-                })
-                .setNegativeButton("Cancel", null)
-                .create());
-    }
-
-    private void promptRestorePassword(byte[] backupBytes) {
-        EditText pass = passwordField("Backup password");
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("Unlock backup")
-                .setMessage("The backup is authenticated before any vault data is changed.")
-                .setView(pass)
-                .setPositiveButton("Validate", null)
-                .setNegativeButton("Cancel", null)
-                .create();
-
-        dialog.setOnShowListener(v -> {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(btn -> {
-                char[] password = pass.getText().toString().toCharArray();
-                try {
-                    BackupManager.RestoredBackup restored = BackupManager.decryptAndValidate(backupBytes, password);
-                    dialog.dismiss();
-                    java.util.Arrays.fill(backupBytes, (byte) 0);
-                    showRestorePreview(restored);
-                } catch (Exception e) {
-                    pass.setError("Incorrect password or damaged/unsupported backup");
-                    pass.requestFocus();
-                } finally {
-                    java.util.Arrays.fill(password, '\0');
-                    pass.setText("");
-                }
-            });
-            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener(btn -> {
-                java.util.Arrays.fill(backupBytes, (byte) 0);
-                dialog.dismiss();
-            });
-        });
-        dialog.setOnCancelListener(d -> java.util.Arrays.fill(backupBytes, (byte) 0));
-
-        ScreenSecurityManager.protect(dialog);
-        showDialog(dialog);
-    }
-
-    private void showRestorePreview(BackupManager.RestoredBackup restored) {
-        if (restored.sourceSchemaVersion > database.currentSchemaVersion()) {
-            showDialog(new AlertDialog.Builder(this)
-                    .setTitle("Backup is newer than this app")
-                    .setMessage("This backup was created from vault schema " + restored.sourceSchemaVersion
-                            + ", but this app supports schema " + database.currentSchemaVersion()
-                            + ". Update Keepriva before restoring it.")
-                    .setPositiveButton("Close", null).create());
-            return;
-        }
-        String hierarchyError = validateCategoryHierarchy(restored.categories, getMaxCategoryDepth());
-        if (hierarchyError != null) {
-            showDialog(new AlertDialog.Builder(this)
-                    .setTitle("Backup category hierarchy cannot be restored")
-                    .setMessage(hierarchyError + "\n\nOpen Preferences and increase the category nesting depth if appropriate, then retry restore.")
-                    .setPositiveButton("Close", null).create());
-            return;
-        }
-        String message = "Backup entries: " + restored.items.size()
-                + "\nCustom categories: " + restored.categories.size()
-                + "\nSource schema version: " + restored.sourceSchemaVersion
-                + "\n\nRestoring will REPLACE the current entries and custom categories."
-                + "\n\nThe operation is transactional: if a write fails, the existing vault remains intact.";
-        showDialog(new AlertDialog.Builder(this)
-                .setTitle("Restore preview")
-                .setMessage(message)
-                .setPositiveButton("Replace current vault", (d,w) -> {
-                    try {
-                        database.replaceAllFromBackup(
-                                restored.categories, restored.items, vaultSession.requireKey());
-                        showVaultScreen();
-                        toast("Encrypted backup restored successfully.");
-                    } catch (Exception e) {
-                        toast("Restore failed; current vault was not partially replaced: " + e.getMessage());
-                    }
-                })
-                .setNegativeButton("Cancel", null)
-                .create());
-    }
-
-    private void showImportDialog() {
-        LinearLayout box = baseVertical(10);
-
-        box.addView(UiStyle.sectionTitle(this, "Bulk import from JSON"));
-        box.addView(UiStyle.sectionCaption(
-                this,
-                "Import is for adding many credentials at once. Keepriva first creates a blank JSON "
-                        + "template that describes categories, fields and entries. Fill it on your computer, "
-                        + "then import the completed JSON back into Keepriva."
-        ));
-
-        TextView steps = subtitle(
-                "1. Save the blank JSON template.\n"
-                        + "2. Fill its entry values in a text editor.\n"
-                        + "3. Import the completed JSON.\n\n"
-                        + "The JSON file is plaintext and NOT encrypted. Keepriva validates it, previews "
-                        + "the changes and encrypts each imported record before local database storage."
-        );
-        steps.setPadding(dp(12), dp(10), dp(12), dp(12));
-        steps.setBackground(UiStyle.outlined(
-                this, R.color.keepriva_surface_soft, R.color.keepriva_outline, 12));
-        box.addView(steps, matchWidth());
-
-        Button download = button("Step 1 — Save JSON import template");
-        Button importFile = primaryButton("Step 2 — Import completed JSON template");
-
-        download.setContentDescription("Download JSON import template");
-        importFile.setContentDescription("Import completed JSON template");
-
-        LinearLayout.LayoutParams first = matchWidth();
-        first.topMargin = dp(10);
-        box.addView(download, first);
-
-        LinearLayout.LayoutParams second = matchWidth();
-        second.topMargin = dp(8);
-        box.addView(importFile, second);
-
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("Import data")
-                .setView(box)
-                .setNegativeButton("Cancel", null)
-                .create();
-
-        download.setOnClickListener(v -> {
-            dialog.dismiss();
-            downloadImportTemplate();
-        });
-        importFile.setOnClickListener(v -> {
-            dialog.dismiss();
-            chooseImportTemplate();
-        });
-
-        ScreenSecurityManager.protect(dialog);
-        showDialog(dialog);
-    }
-
-    private void downloadImportTemplate() {
-        try {
-            pendingTemplateBytes = ImportManager.buildTemplate().getBytes(StandardCharsets.UTF_8);
-            Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
-            intent.addCategory(Intent.CATEGORY_OPENABLE);
-            intent.setType("application/json");
-            intent.putExtra(Intent.EXTRA_TITLE, "Keepriva-import-template.json");
-            beginSystemPicker();
-            startActivityForResult(intent, TEMPLATE_EXPORT_REQUEST);
-        } catch (Exception e) { toast("Could not create import template: " + e.getMessage()); }
-    }
-
-    private void chooseImportTemplate() {
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.setType("application/json");
-        systemPickerInProgress = true;
-        startActivityForResult(intent, IMPORT_REQUEST);
-    }
-
-    private byte[] readBytes(Uri uri) throws Exception {
-        try (InputStream in = getContentResolver().openInputStream(uri);
-             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            if (in == null) throw new IllegalStateException("Cannot open selected file");
-            byte[] buffer = new byte[8192];
-            int n;
-            while ((n = in.read(buffer)) >= 0) out.write(buffer, 0, n);
-            return out.toByteArray();
-        }
-    }
-
-    private String readUtf8(Uri uri) throws Exception {
-        byte[] bytes = readBytes(uri);
-        try { return new String(bytes, StandardCharsets.UTF_8); }
-        finally { java.util.Arrays.fill(bytes, (byte) 0); }
-    }
-
-    private void previewImport(String json) {
-        ImportManager.ParsedImport parsed = ImportManager.parse(json, customCategories, BUILT_IN_CATEGORIES);
-        StringBuilder message = new StringBuilder();
-        message.append("Entries ready: ").append(parsed.items.size())
-                .append("\nNew custom categories: ").append(parsed.categoriesToCreate.size())
-                .append("\nSensitive field definitions: ").append(parsed.sensitiveFieldCount)
-                .append("\nMultiple-value field definitions: ").append(parsed.multipleValueFieldCount);
-        if (!parsed.warnings.isEmpty()) {
-            message.append("\n\nWarnings:");
-            int limit = Math.min(parsed.warnings.size(), 8);
-            for (int i = 0; i < limit; i++) message.append("\n• ").append(parsed.warnings.get(i));
-            if (parsed.warnings.size() > limit) message.append("\n• … and ").append(parsed.warnings.size() - limit).append(" more");
-        }
-        List<CustomCategory> hierarchyPreview = new ArrayList<>(customCategories);
-        hierarchyPreview.addAll(parsed.categoriesToCreate);
-        String hierarchyError = validateCategoryHierarchy(hierarchyPreview, getMaxCategoryDepth());
-        if (hierarchyError != null) parsed.errors.add(hierarchyError);
-
-        if (!parsed.errors.isEmpty()) {
-            message.append("\n\nErrors:");
-            int limit = Math.min(parsed.errors.size(), 8);
-            for (int i = 0; i < limit; i++) message.append("\n• ").append(parsed.errors.get(i));
-            if (parsed.errors.size() > limit) message.append("\n• … and ").append(parsed.errors.size() - limit).append(" more");
-            showDialog(new AlertDialog.Builder(this).setTitle("Import validation failed")
-                    .setMessage(message.toString()).setPositiveButton("Close", null).create());
-            return;
-        }
-        if (parsed.items.isEmpty()) {
-            showDialog(new AlertDialog.Builder(this).setTitle("Nothing to import")
-                    .setMessage(message.toString()).setPositiveButton("Close", null).create());
-            return;
-        }
-        message.append("\n\nOn import, all entry fields—including fields marked sensitive—are encrypted before being written to the local vault database.");
-        showDialog(new AlertDialog.Builder(this).setTitle("Import preview")
-                .setMessage(message.toString())
-                .setPositiveButton("Import", (d, w) -> commitImport(parsed))
-                .setNegativeButton("Cancel", null).create());
-    }
-
-    private void commitImport(ImportManager.ParsedImport parsed) {
-        try {
-            database.importBatch(
-                    parsed.categoriesToCreate, parsed.items, vaultSession.requireKey());
-            showVaultScreen();
-            toast("Imported " + parsed.items.size() + (parsed.items.size() == 1 ? " entry." : " entries."));
-        } catch (Exception e) {
-            toast("Import failed: " + e.getMessage());
-        }
-    }
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-
-        boolean lockAfterPicker = shouldLockAfterPicker();
-        systemPickerInProgress = false;
-        systemPickerStartedAt = 0L;
-        backgroundAt = 0L;
-
-        if (resultCode != RESULT_OK || data == null || data.getData() == null) {
-            if (requestCode == EXPORT_REQUEST) clearPendingExportData();
-            else if (requestCode == TEMPLATE_EXPORT_REQUEST) clearPendingTemplateData();
-            else if (requestCode == BACKUP_EXPORT_REQUEST) clearPendingBackupData();
-
-            if (lockAfterPicker) lockVault();
-            return;
-        }
-
-        Uri uri = data.getData();
-
-        if (requestCode == EXPORT_REQUEST) {
-            try (OutputStream out = getContentResolver().openOutputStream(uri)) {
-                if (out == null) throw new IllegalStateException("Cannot open selected file");
-                if (pendingExportBytes == null) throw new IllegalStateException("Export data is unavailable");
-                out.write(pendingExportBytes);
-                out.flush();
-                toast("Export saved.");
-            } catch (Exception e) {
-                toast("Export failed: " + e.getMessage());
-            } finally {
-                clearPendingExportData();
-            }
-        } else if (requestCode == TEMPLATE_EXPORT_REQUEST) {
-            try (OutputStream out = getContentResolver().openOutputStream(uri)) {
-                if (out == null) throw new IllegalStateException("Cannot open selected file");
-                if (pendingTemplateBytes == null) throw new IllegalStateException("Template data is unavailable");
-                out.write(pendingTemplateBytes);
-                out.flush();
-                toast("Import template saved.");
-            } catch (Exception e) {
-                toast("Template save failed: " + e.getMessage());
-            } finally {
-                clearPendingTemplateData();
-            }
-        } else if (requestCode == IMPORT_REQUEST) {
-            try {
-                previewImport(readUtf8(uri));
-            } catch (Exception e) {
-                toast("Could not read import file: " + e.getMessage());
-            }
-        } else if (requestCode == BACKUP_EXPORT_REQUEST) {
-            try (OutputStream out = getContentResolver().openOutputStream(uri)) {
-                if (out == null) throw new IllegalStateException("Cannot open selected file");
-                if (pendingBackupBytes == null) throw new IllegalStateException("Backup data is unavailable");
-                out.write(pendingBackupBytes);
-                out.flush();
-                toast("Encrypted .pvault backup saved.");
-            } catch (Exception e) {
-                toast("Backup save failed: " + e.getMessage());
-            } finally {
-                clearPendingBackupData();
-            }
-        } else if (requestCode == BACKUP_RESTORE_REQUEST) {
-            try {
-                promptRestorePassword(readBytes(uri));
-            } catch (Exception e) {
-                toast("Could not read backup file: " + e.getMessage());
-            }
-        }
-
-        if (lockAfterPicker && requestCode != BACKUP_RESTORE_REQUEST) {
-            lockVault();
-        }
-    }
-    private String sanitizeFileName(String value) {
-        String s = safe(value).trim().replaceAll("[\\\\/:*?\"<>|]", "_");
-        return s.isEmpty() ? "Keepriva-export" : s;
-    }
-
     private LinearLayout baseVertical(int gapDp) {
         return viewFactory.verticalContainer(gapDp);
     }
@@ -1670,7 +1070,7 @@ public class MainActivity extends Activity implements
 
     @Override public void exportItem(long itemId) {
         VaultItem item = findItem(itemId);
-        if (item != null) showExportFormatChooser(Collections.singletonList(item), item.title);
+        if (item != null) dataTransferController.exportEntry(itemId);
     }
 
     @Override public void copySensitiveField(String value) {
@@ -1695,6 +1095,82 @@ public class MainActivity extends Activity implements
     @Override public void onItemRestored(long itemId) { loadItems(); }
 
     @Override public void onItemDialogClosed() { }
+
+    @Override public List<VaultItem> itemsForExport(String category) {
+        List<VaultItem> selected = new ArrayList<>();
+        for (VaultItem item : allItems) {
+            if ("All".equals(category) || isDescendantOf(item.category, category)) selected.add(item);
+        }
+        return selected;
+    }
+
+    @Override public String[] builtInCategoryNames() { return BUILT_IN_CATEGORIES.clone(); }
+
+    @Override public boolean verifyExportPassword(String password) {
+        try {
+            SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+            SecretKey verified = prefs.getInt(PREF_CRYPTO_VERSION, 0) >= CRYPTO_VERSION_2
+                    ? unlockV2(password, prefs)
+                    : unlockLegacyForVerification(password, prefs);
+            return verified != null;
+        } catch (Exception error) { return false; }
+    }
+
+    @Override public byte[] createEncryptedBackup(char[] password) throws Exception {
+        List<CustomCategory> categories = database.listCustomCategories(vaultSession.requireKey());
+        List<VaultItem> items = database.list(vaultSession.requireKey());
+        return BackupManager.createBackup(categories, items, password, database.currentSchemaVersion());
+    }
+
+    @Override public int schemaVersion() { return database.currentSchemaVersion(); }
+
+    @Override public String validateCategoryHierarchy(List<CustomCategory> categories) {
+        return validateCategoryHierarchy(categories, getMaxCategoryDepth());
+    }
+
+    @Override public void restoreBackup(BackupManager.RestoredBackup restored) throws Exception {
+        database.replaceAllFromBackup(restored.categories, restored.items, vaultSession.requireKey());
+    }
+
+    @Override public void importBatch(ImportManager.ParsedImport parsed) throws Exception {
+        database.importBatch(parsed.categoriesToCreate, parsed.items, vaultSession.requireKey());
+    }
+
+    @Override public void onTransferCompleted() { showVaultScreen(); }
+    @Override public void onTransferClosed() { }
+
+    @Override public void onPickerRequested(TransferOperation operation, String mimeType, String suggestedName) {
+        if (!vaultSession.isUnlocked()) { dataTransferController.cancelPending(operation); return; }
+        Intent intent = new Intent(operation == TransferOperation.JSON_IMPORT
+                || operation == TransferOperation.BACKUP_RESTORE
+                ? Intent.ACTION_OPEN_DOCUMENT : Intent.ACTION_CREATE_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType(mimeType);
+        if (suggestedName != null) intent.putExtra(Intent.EXTRA_TITLE, suggestedName);
+        try {
+            activityResults.begin(operation, System.currentTimeMillis());
+            startActivityForResult(intent, ActivityResultCoordinator.requestCode(operation));
+        } catch (RuntimeException error) {
+            activityResults.clear();
+            dataTransferController.cancelPending(operation);
+            toast("Could not open document picker.");
+        }
+    }
+
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        ActivityResultCoordinator.Completed completed = activityResults.complete(
+                requestCode, System.currentTimeMillis(), getAutoLockMs(), vaultSession.isUnlocked());
+        if (completed == null) return;
+        backgroundAt = 0L;
+        if (completed.lockAfterPicker) {
+            dataTransferController.cancelPending(completed.operation);
+            lockVault();
+            return;
+        }
+        Uri uri = resultCode == RESULT_OK && data != null ? data.getData() : null;
+        dataTransferController.handlePickerResult(completed.operation, uri);
+    }
 
     private static String safe(String s) { return s == null ? "" : s; }
 }

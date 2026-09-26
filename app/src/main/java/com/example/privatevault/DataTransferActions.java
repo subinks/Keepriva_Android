@@ -1,7 +1,8 @@
 package com.example.privatevault;
 
-/** Activity-bound picker events emitted by the transfer controller. */
+/** Typed picker and completion events; no URI, payload or key crosses the action contract. */
 interface DataTransferActions {
     void onPickerRequested(TransferOperation operation, String mimeType, String suggestedName);
+    void onTransferCompleted();
     void onTransferClosed();
 }

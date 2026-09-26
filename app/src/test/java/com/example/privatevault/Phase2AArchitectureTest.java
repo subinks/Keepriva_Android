@@ -174,6 +174,7 @@ public class Phase2AArchitectureTest {
                 UnlockController.class,
                 SecuritySettingsController.class,
                 CategoryManagementController.class,
+                ItemDialogController.class,
                 VaultSecurityPreferences.class
         };
 
@@ -254,6 +255,27 @@ public class Phase2AArchitectureTest {
             assertFalse("Category controller must not own Bundle state",
                     Bundle.class.isAssignableFrom(field.getType()));
             assertFalse("Category controller must not own Parcelable state",
+                    Parcelable.class.isAssignableFrom(field.getType()));
+        });
+    }
+
+    @Test
+    public void waveC3ItemDialogs_useLifecycleAndNarrowHostContracts() {
+        assertTrue(VaultController.class.isAssignableFrom(ItemDialogController.class));
+        assertTrue(ItemDialogController.Gateway.class.isAssignableFrom(MainActivity.class));
+        assertTrue(ItemDialogActions.class.isAssignableFrom(MainActivity.class));
+
+        Arrays.stream(ItemDialogController.class.getDeclaredFields()).forEach(field -> {
+            if (Modifier.isStatic(field.getModifiers())) return;
+            assertFalse("Item controller must not own SecretKey",
+                    SecretKey.class.isAssignableFrom(field.getType()));
+            assertFalse("Item controller must not own decrypted VaultItem",
+                    VaultItem.class.isAssignableFrom(field.getType()));
+            assertFalse("Item controller must not own byte arrays",
+                    field.getType().equals(byte[].class));
+            assertFalse("Item controller must not own Bundle state",
+                    Bundle.class.isAssignableFrom(field.getType()));
+            assertFalse("Item controller must not own Parcelable state",
                     Parcelable.class.isAssignableFrom(field.getType()));
         });
     }

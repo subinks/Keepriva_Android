@@ -57,7 +57,9 @@ public class MainActivity extends Activity implements
         LegacyVaultBrowserController.DataSource,
         VaultBrowserActions,
         CategoryManagementController.Gateway,
-        CategoryManagementActions {
+        CategoryManagementActions,
+        ItemDialogController.Gateway,
+        ItemDialogActions {
     private static final String PREFS = "vault_config";
     private static final String PREF_HIDDEN_BUILT_IN_CATEGORIES = "hidden_built_in_categories";
     // v1.x legacy configuration keys. Kept for one-time in-place migration.
@@ -83,14 +85,6 @@ public class MainActivity extends Activity implements
     private static final int BACKUP_EXPORT_REQUEST = 7004;
     private static final int BACKUP_RESTORE_REQUEST = 7005;
 
-    /** Spinner model: keep the stable category name separate from its hierarchical label. */
-    private static final class CategoryOption {
-        final String name;
-        final String label;
-        CategoryOption(String name, String label) { this.name = name; this.label = label; }
-        @Override public String toString() { return label; }
-    }
-
     private final VaultSessionCoordinator vaultSession = new VaultSessionCoordinator();
     private final CategoryHierarchyService categoryHierarchy =
             new CategoryHierarchyService(BUILT_IN_CATEGORIES);
@@ -106,9 +100,9 @@ public class MainActivity extends Activity implements
     private SecuritySettingsController securitySettingsController;
     private LegacyVaultBrowserController browserController;
     private CategoryManagementController categoryManagementController;
+    private ItemDialogController itemDialogController;
     private final VaultScreenRouter screenRouter = new VaultScreenRouter();
     private String selectedHomeCategory = "All";
-    private String pendingNewItemCategory = null;
     private List<VaultItem> allItems = new ArrayList<>();
     private List<CustomCategory> customCategories = new ArrayList<>();
     private byte[] pendingExportBytes;
@@ -153,6 +147,8 @@ public class MainActivity extends Activity implements
         categoryManagementController = controllerRegistry.register(
                 new CategoryManagementController(
                         this, viewFactory, dialogRegistry, categoryHierarchy, this, this));
+        itemDialogController = controllerRegistry.register(
+                new ItemDialogController(this, viewFactory, dialogRegistry, this, this));
         database = new VaultDatabase(this);
         clipboardSecurity = new ClipboardSecurityManager(this);
         registerScreenOffReceiver();
@@ -602,7 +598,8 @@ public class MainActivity extends Activity implements
         return categoryHierarchy.deepestDepth(customCategories);
     }
 
-    private String categoryPath(String categoryName) {
+    @Override
+    public String categoryPath(String categoryName) {
         return categoryHierarchy.path(categoryName, customCategories);
     }
 
@@ -694,7 +691,8 @@ public class MainActivity extends Activity implements
         lockVault();
     }
 
-    private void copyPasswordToClipboard(String password) {
+    @Override
+    public void copyPassword(String password) {
         if (password == null || password.isEmpty()) return;
         long timeout = getClipboardTimeoutMs();
         clipboardSecurity.copySensitive("Keepriva password", password, timeout);
@@ -719,7 +717,6 @@ public class MainActivity extends Activity implements
         customCategories.clear();
         if (browserController != null) browserController.clearSessionState();
         selectedHomeCategory = "All";
-        pendingNewItemCategory = null;
         clearPendingExportData();
         clearPendingTemplateData();
         clearPendingBackupData();
@@ -760,14 +757,12 @@ public class MainActivity extends Activity implements
 
     @Override
     public void onItemSelected(long itemId) {
-        VaultItem item = findItemById(itemId);
-        if (item != null) showDetails(item);
+        itemDialogController.showDetails(itemId);
     }
 
     @Override
     public void onAddEntryRequested(String categoryName) {
-        pendingNewItemCategory = safe(categoryName).isEmpty() ? "Login" : categoryName;
-        showEditDialog(null);
+        itemDialogController.showEditor(null, safe(categoryName).isEmpty() ? "Login" : categoryName);
     }
 
     @Override
@@ -816,7 +811,8 @@ public class MainActivity extends Activity implements
                 selectedHomeCategory, safe(query), Math.max(0, scrollPosition)));
     }
 
-    private VaultItem findItemById(long itemId) {
+    @Override
+    public VaultItem findItem(long itemId) {
         for (VaultItem item : allItems) {
             if (item.id == itemId) return item;
         }
@@ -830,492 +826,6 @@ public class MainActivity extends Activity implements
         } catch (Exception error) {
             toast("Could not decrypt vault. Locking for safety.");
             lockVault();
-        }
-    }
-
-    private void showDetails(VaultItem item) {
-        LinearLayout body = baseVertical(8);
-        addLabelValue(body, "Category", categoryPath(item.category));
-
-        String category = safe(item.category);
-        if ("Contact".equals(category)) {
-            addNonEmptyLabelValue(body, "Phone 1", item.phone1);
-            addNonEmptyLabelValue(body, "Phone 2", item.phone2);
-            addNonEmptyLabelValue(body, "Phone 3", item.phone3);
-            addNonEmptyLabelValue(body, "Email", item.username);
-            addNonEmptyLabelValue(body, "Website", item.website);
-            addNonEmptyLabelValue(body, "Website URL", item.websiteUrl);
-        } else if ("Secure Note".equals(category)) {
-            // Notes are shown below. Other fields are shown only when they actually contain data.
-            addNonEmptyLabelValue(body, "Username / Email", item.username);
-            addNonEmptyLabelValue(body, "Phone 1", item.phone1);
-            addNonEmptyLabelValue(body, "Phone 2", item.phone2);
-            addNonEmptyLabelValue(body, "Phone 3", item.phone3);
-            addNonEmptyLabelValue(body, "Website / App", item.website);
-            addNonEmptyLabelValue(body, "Website URL", item.websiteUrl);
-        } else {
-            String userLabel = "Banking".equals(category) ? "Customer ID / Username" : "Username / Email";
-            addNonEmptyLabelValue(body, userLabel, item.username);
-            addNonEmptyLabelValue(body, "Phone 1", item.phone1);
-            addNonEmptyLabelValue(body, "Phone 2", item.phone2);
-            addNonEmptyLabelValue(body, "Phone 3", item.phone3);
-            addNonEmptyLabelValue(body, websiteLabelFor(category), item.website);
-            addNonEmptyLabelValue(body, "Website URL", item.websiteUrl);
-        }
-
-        if (item.customFields != null) {
-            CustomCategory itemCustomCategory = findCustomCategory(item.category);
-            java.util.Set<String> sensitiveNames = itemCustomCategory == null
-                    ? java.util.Collections.emptySet()
-                    : new java.util.HashSet<>(itemCustomCategory.sensitiveFields);
-
-            for (Map.Entry<String, String> e : item.customFields.entrySet()) {
-                if (sensitiveNames.contains(e.getKey())) {
-                    addSensitiveCustomField(body, e.getKey(), e.getValue());
-                } else {
-                    addNonEmptyLabelValue(body, e.getKey(), e.getValue());
-                }
-            }
-        }
-
-        ImageButton exportEntry = smallIconButton(R.drawable.ic_keepriva_export,
-                "Export entry", false);
-        exportEntry.setOnClickListener(v -> showExportFormatChooser(Collections.singletonList(item), item.title));
-        body.addView(exportEntry);
-
-        if (!safe(item.password).isEmpty()) {
-            TextView label = boldLabel("Password");
-            body.addView(label);
-            LinearLayout pwRow = new LinearLayout(this);
-            pwRow.setOrientation(LinearLayout.HORIZONTAL);
-            TextView pw = new TextView(this);
-            pw.setText("••••••••••••");
-            pw.setContentDescription("Masked password");
-            pw.setTextSize(17);
-            pw.setPadding(0, dp(4), dp(8), dp(8));
-            pwRow.addView(pw, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
-            ImageButton show = smallIconButton(R.drawable.ic_keepriva_visibility,
-                    "Show password", false);
-            final boolean[] visible = {false};
-            show.setOnClickListener(v -> {
-                visible[0] = !visible[0];
-                pw.setText(visible[0] ? item.password : "••••••••••••");
-                pw.setContentDescription(visible[0] ? "Visible password" : "Masked password");
-                show.setImageResource(visible[0] ? R.drawable.ic_keepriva_visibility_off : R.drawable.ic_keepriva_visibility);
-                show.setContentDescription(visible[0] ? "Hide password" : "Show password");
-            });
-            pwRow.addView(show);
-            ImageButton copy = smallIconButton(R.drawable.ic_keepriva_copy,
-                    "Copy password securely", false);
-            copy.setOnClickListener(v -> copyPasswordToClipboard(item.password));
-            pwRow.addView(copy);
-            body.addView(pwRow);
-        }
-        addNonEmptyLabelValue(body, "Notes", item.notes);
-
-        LinearLayout detailActions = new LinearLayout(this);
-        detailActions.setOrientation(LinearLayout.HORIZONTAL);
-        detailActions.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
-        detailActions.setPadding(0, dp(10), 0, 0);
-
-        ImageButton editItem = smallIconButton(R.drawable.ic_keepriva_edit, "Edit item", false);
-        ImageButton deleteItem = smallIconButton(R.drawable.ic_keepriva_delete, "Delete item", true);
-        ImageButton closeDetails = smallIconButton(R.drawable.ic_keepriva_close, "Close item details", false);
-        detailActions.addView(editItem);
-        LinearLayout.LayoutParams dp1 = new LinearLayout.LayoutParams(dp(40), dp(40)); dp1.leftMargin = dp(8); detailActions.addView(deleteItem, dp1);
-        LinearLayout.LayoutParams cp1 = new LinearLayout.LayoutParams(dp(40), dp(40)); cp1.leftMargin = dp(8); detailActions.addView(closeDetails, cp1);
-        body.addView(detailActions, matchWidth());
-
-        AlertDialog d = new AlertDialog.Builder(this)
-                .setTitle(item.title.isEmpty() ? "Vault item" : item.title)
-                .setView(wrap(body))
-                .create();
-        editItem.setOnClickListener(v -> { d.dismiss(); showEditDialog(item); });
-        deleteItem.setOnClickListener(v -> confirmDelete(item, d));
-        closeDetails.setOnClickListener(v -> d.dismiss());
-        ScreenSecurityManager.protect(d);
-        showDialog(d);
-    }
-
-    private void confirmDelete(VaultItem item, AlertDialog parent) {
-        final VaultItem deletedSnapshot = copyVaultItem(item);
-        showDialog(new AlertDialog.Builder(this)
-                .setTitle("Delete item?")
-                .setMessage("Delete \"" + safe(item.title) + "\" from the vault? You can undo this deletion immediately afterward.")
-                .setPositiveButton("Delete", (d, w) -> {
-                    database.delete(item.id);
-                    parent.dismiss();
-                    loadItems();
-                    showUndoDeletedItem(deletedSnapshot);
-                })
-                .setNegativeButton("Cancel", null).create());
-    }
-
-    private VaultItem copyVaultItem(VaultItem source) {
-        VaultItem copy = new VaultItem();
-        copy.title = source.title;
-        copy.category = source.category;
-        copy.username = source.username;
-        copy.password = source.password;
-        copy.website = source.website;
-        copy.websiteUrl = source.websiteUrl;
-        copy.phone1 = source.phone1;
-        copy.phone2 = source.phone2;
-        copy.phone3 = source.phone3;
-        copy.notes = source.notes;
-        copy.customFields = new LinkedHashMap<>();
-        if (source.customFields != null) copy.customFields.putAll(source.customFields);
-        // Restore as a new row if Undo is chosen; the deleted row id no longer exists.
-        copy.id = 0;
-        copy.createdAt = source.createdAt;
-        return copy;
-    }
-
-    private void showUndoDeletedItem(VaultItem deletedSnapshot) {
-        showDialog(new AlertDialog.Builder(this)
-                .setTitle("Item deleted")
-                .setMessage("\"" + safe(deletedSnapshot.title) + "\" was deleted.")
-                .setPositiveButton("Undo", (d, w) -> {
-                    try {
-                        database.save(deletedSnapshot, vaultSession.requireKey());
-                        loadItems();
-                        toast("Item restored.");
-                    } catch (Exception e) {
-                        toast("Could not restore the deleted item.");
-                    }
-                })
-                .setNegativeButton("Dismiss", null)
-                .create());
-    }
-
-    private void showEditDialog(VaultItem existing) {
-        VaultItem item = existing == null ? new VaultItem() : existing;
-        LinearLayout form = baseVertical(6);
-        EditText title = field("Title", item.title);
-        title.setContentDescription("Item title");
-        Spinner category = new Spinner(this);
-        CategoryOption[] editableCats = getEditableCategories();
-        category.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, editableCats));
-        int idx = 0;
-        String requestedCategory = existing == null && pendingNewItemCategory != null
-                ? pendingNewItemCategory
-                : item.category;
-        for (int i = 0; i < editableCats.length; i++) {
-            if (editableCats[i].name.equals(requestedCategory)) idx = i;
-        }
-        pendingNewItemCategory = null;
-        category.setSelection(idx);
-
-        TextView formHelp = subtitle("");
-        EditText username = field("Username / email (optional)", item.username);
-        EditText password = passwordField("Password (optional)");
-        password.setText(item.password);
-        EditText phone1 = phoneField("Phone 1 (optional)", item.phone1);
-        EditText phone2 = phoneField("Phone 2 (optional)", item.phone2);
-        EditText phone3 = phoneField("Phone 3 (optional)", item.phone3);
-        EditText website = field("Website or app name (optional)", item.website);
-        EditText websiteUrl = field("Website URL (optional)", item.websiteUrl);
-        EditText notes = field("Notes (optional)", item.notes);
-        notes.setSingleLine(false);
-        notes.setMinLines(4);
-        notes.setGravity(Gravity.TOP);
-
-        TextView loginSection = boldLabel("Login details");
-        TextView phoneSection = boldLabel("Phone numbers");
-        TextView webSection = boldLabel("Website / App details");
-        Button optionalToggle = button("Show all optional fields");
-        final boolean[] showAll = {false};
-        TextView customSection = boldLabel("Custom fields");
-        LinearLayout customContainer = baseVertical(2);
-        Map<String, String> customDraft = new LinkedHashMap<>();
-        if (item.customFields != null) customDraft.putAll(item.customFields);
-        Map<String, EditText> customEditors = new LinkedHashMap<>();
-
-        form.addView(title);
-        form.addView(category);
-        form.addView(formHelp);
-        form.addView(optionalToggle);
-        form.addView(loginSection);
-        form.addView(username);
-        form.addView(password);
-        form.addView(phoneSection);
-        form.addView(phone1);
-        form.addView(phone2);
-        form.addView(phone3);
-        form.addView(webSection);
-        form.addView(website);
-        form.addView(websiteUrl);
-        form.addView(customSection);
-        form.addView(customContainer);
-        form.addView(boldLabel("Notes"));
-        form.addView(notes);
-
-        Runnable refresh = () -> {
-            captureCustomValues(customEditors, customDraft);
-            String selected = selectedCategoryName(category, "Other");
-            applyCategoryFormLayout(selected, showAll[0], formHelp,
-                    loginSection, username, password,
-                    phoneSection, phone1, phone2, phone3,
-                    webSection, website, websiteUrl, notes, optionalToggle);
-            rebuildCustomFieldEditors(selected, customSection, customContainer, customEditors, customDraft);
-        };
-
-        optionalToggle.setOnClickListener(v -> {
-            showAll[0] = !showAll[0];
-            refresh.run();
-        });
-        category.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) { refresh.run(); }
-            @Override public void onNothingSelected(AdapterView<?> parent) { }
-        });
-        refresh.run();
-
-        // Keep the editor actions inside the custom dialog content instead of
-        // relying on AlertDialog's platform footer. On some API/theme combinations
-        // the very tall ScrollView consumes the dialog measurement and the standard
-        // positive/negative buttons are not exposed in the final view hierarchy.
-        // Explicit action buttons are both more reliable for users and testable by
-        // accessibility/Espresso.
-        LinearLayout editorRoot = baseVertical(8);
-
-        ScrollView editorScroll = wrap(form);
-
-        // AlertDialog measures its custom content with a WRAP_CONTENT-style pass.
-        // A child using height=0 + weight=1 can therefore receive no usable space,
-        // which also prevents the action row below it from being attached/layouted
-        // consistently on some API/theme combinations.
-        //
-        // Give the editor a bounded real height instead. The fields remain scrollable,
-        // while Save/Cancel stay permanently present below the scrolling region.
-        int screenHeightPx = getResources().getDisplayMetrics().heightPixels;
-        int preferredEditorHeightPx = (int) (screenHeightPx * 0.55f);
-        int editorHeightPx = Math.max(
-                dp(280),
-                Math.min(dp(520), preferredEditorHeightPx)
-        );
-
-        LinearLayout.LayoutParams scrollParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                editorHeightPx
-        );
-        editorRoot.addView(editorScroll, scrollParams);
-
-        LinearLayout actions = new LinearLayout(this);
-        actions.setOrientation(LinearLayout.HORIZONTAL);
-        actions.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
-        actions.setPadding(0, dp(8), 0, 0);
-
-        Button cancelEditor = button("Cancel");
-        cancelEditor.setContentDescription("Cancel vault item");
-
-        Button saveEditor = primaryButton("Save");
-        saveEditor.setContentDescription("Save vault item");
-
-        actions.addView(cancelEditor);
-
-        LinearLayout.LayoutParams saveParams =
-                new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.WRAP_CONTENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT);
-        saveParams.leftMargin = dp(8);
-        actions.addView(saveEditor, saveParams);
-
-        editorRoot.addView(actions, matchWidth());
-
-        AlertDialog d = new AlertDialog.Builder(this)
-                .setTitle(existing == null ? "Add vault item" : "Edit vault item")
-                .setView(editorRoot)
-                .create();
-
-        cancelEditor.setOnClickListener(v -> d.dismiss());
-
-        saveEditor.setOnClickListener(v -> {
-            if (title.getText().toString().trim().isEmpty()) {
-                title.setError("Title is required");
-                title.requestFocus();
-                return;
-            }
-
-            item.title = title.getText().toString().trim();
-            item.category = selectedCategoryName(category, "Other");
-            item.username = username.getText().toString();
-            item.password = password.getText().toString();
-            item.phone1 = phone1.getText().toString();
-            item.phone2 = phone2.getText().toString();
-            item.phone3 = phone3.getText().toString();
-            item.website = website.getText().toString();
-            item.websiteUrl = websiteUrl.getText().toString();
-            item.notes = notes.getText().toString();
-
-            captureCustomValues(customEditors, customDraft);
-            item.customFields = new LinkedHashMap<>(customDraft);
-
-            try {
-                database.save(item, vaultSession.requireKey());
-                d.dismiss();
-                selectedHomeCategory = item.category;
-                browserController.selectCategory(item.category, true);
-                loadItems();
-            } catch (Exception e) {
-                toast("Could not save encrypted item.");
-            }
-        });
-
-        ScreenSecurityManager.protect(d);
-        showDialog(d);
-    }
-
-    private void applyCategoryFormLayout(
-            String category, boolean showAll, TextView help,
-            TextView loginSection, EditText username, EditText password,
-            TextView phoneSection, EditText phone1, EditText phone2, EditText phone3,
-            TextView webSection, EditText website, EditText websiteUrl,
-            EditText notes, Button toggle) {
-
-        boolean login = showAll;
-        boolean phones = showAll;
-        boolean web = showAll;
-
-        if (isCustomCategory(category)) {
-            help.setText("Custom category. Its configured fields are shown below. Use Show all optional fields to also use standard credential/contact fields.");
-            setVisible(loginSection, showAll); setVisible(username, showAll); setVisible(password, showAll);
-            setVisible(phoneSection, showAll); setVisible(phone1, showAll); setVisible(phone2, showAll); setVisible(phone3, showAll);
-            setVisible(webSection, showAll); setVisible(website, showAll); setVisible(websiteUrl, showAll);
-            notes.setVisibility(View.VISIBLE);
-            toggle.setVisibility(View.VISIBLE);
-            toggle.setText(showAll ? "Use custom fields only" : "Show all optional fields");
-            return;
-        }
-
-        switch (category) {
-            case "Login":
-                login = true; web = true;
-                help.setText("For general credentials. Login and website fields are shown first.");
-                username.setHint("Username / email (optional)");
-                website.setHint("Website or app name (optional)");
-                break;
-            case "Website":
-                login = true; web = true;
-                help.setText("For website credentials. URL, username and password are emphasized.");
-                username.setHint("Username / email (optional)");
-                website.setHint("Website name (optional)");
-                break;
-            case "App":
-                login = true; web = true;
-                help.setText("For mobile or desktop app credentials.");
-                username.setHint("Username / email (optional)");
-                website.setHint("App name (optional)");
-                break;
-            case "Contact":
-                phones = true;
-                help.setText("For private contact information. Phone numbers are emphasized.");
-                username.setHint("Email (optional)");
-                website.setHint("Website / organization (optional)");
-                break;
-            case "Banking":
-                login = true; phones = true; web = true;
-                help.setText("For banking records. Use Customer ID / Username for the bank login or customer identifier.");
-                username.setHint("Customer ID / username (optional)");
-                website.setHint("Bank / service name (optional)");
-                break;
-            case "Work":
-                login = true; phones = true; web = true;
-                help.setText("For work accounts, internal systems, contacts and related notes.");
-                username.setHint("Work username / email (optional)");
-                website.setHint("System / website / app (optional)");
-                break;
-            case "Personal":
-                phones = true; web = true;
-                help.setText("For personal information, contacts, websites and notes.");
-                username.setHint("Username / email (optional)");
-                website.setHint("Website / app / organization (optional)");
-                break;
-            case "Secure Note":
-                help.setText("For encrypted free-form notes. Use Show all optional fields if this note also needs phones, a URL or credentials.");
-                username.setHint("Username / email (optional)");
-                website.setHint("Website / app name (optional)");
-                break;
-            default:
-                login = true; phones = true; web = true;
-                help.setText("Flexible record. All common fields are available.");
-                username.setHint("Username / email (optional)");
-                website.setHint("Website or app name (optional)");
-                break;
-        }
-
-        setVisible(loginSection, login);
-        setVisible(username, login);
-        setVisible(password, login);
-        setVisible(phoneSection, phones);
-        setVisible(phone1, phones);
-        setVisible(phone2, phones);
-        setVisible(phone3, phones);
-        setVisible(webSection, web);
-        setVisible(website, web);
-        setVisible(websiteUrl, web);
-        notes.setVisibility(View.VISIBLE);
-
-        boolean hasHidden = !(login && phones && web);
-        toggle.setVisibility(hasHidden || showAll ? View.VISIBLE : View.GONE);
-        toggle.setText(showAll ? "Use category-specific fields" : "Show all optional fields");
-    }
-
-    private void setVisible(View view, boolean visible) {
-        view.setVisibility(visible ? View.VISIBLE : View.GONE);
-    }
-
-    private String websiteLabelFor(String category) {
-        if ("App".equals(category)) return "App";
-        if ("Website".equals(category)) return "Website";
-        if ("Banking".equals(category)) return "Bank / Service";
-        if ("Work".equals(category)) return "System / Website / App";
-        return "Website / App";
-    }
-
-    private CategoryOption[] getEditableCategories() {
-        List<CategoryOption> options = new ArrayList<>();
-        for (String builtIn : activeBuiltInCategories()) options.add(new CategoryOption(builtIn, builtIn));
-        List<CustomCategory> sorted = new ArrayList<>(customCategories);
-        sorted.sort((a,b) -> categoryPath(a.name).compareToIgnoreCase(categoryPath(b.name)));
-        for (CustomCategory c : sorted) {
-            if (!safe(c.name).trim().isEmpty()) options.add(new CategoryOption(c.name.trim(), categoryPath(c.name)));
-        }
-        return options.toArray(new CategoryOption[0]);
-    }
-
-    private String selectedCategoryName(Spinner spinner, String fallback) {
-        if (spinner == null || spinner.getSelectedItem() == null) return fallback;
-        Object selected = spinner.getSelectedItem();
-        return selected instanceof CategoryOption ? ((CategoryOption) selected).name : String.valueOf(selected);
-    }
-
-    private boolean isCustomCategory(String name) { return findCustomCategory(name) != null; }
-
-    private CustomCategory findCustomCategory(String name) {
-        for (CustomCategory c : customCategories) if (safe(c.name).equals(name)) return c;
-        return null;
-    }
-
-    private void captureCustomValues(Map<String, EditText> editors, Map<String, String> draft) {
-        for (Map.Entry<String, EditText> e : editors.entrySet()) draft.put(e.getKey(), e.getValue().getText().toString());
-    }
-
-    private void rebuildCustomFieldEditors(String category, TextView section, LinearLayout container,
-                                           Map<String, EditText> editors, Map<String, String> draft) {
-        container.removeAllViews();
-        editors.clear();
-        CustomCategory custom = findCustomCategory(category);
-        boolean visible = custom != null && !custom.fields.isEmpty();
-        section.setVisibility(visible ? View.VISIBLE : View.GONE);
-        container.setVisibility(visible ? View.VISIBLE : View.GONE);
-        if (!visible) return;
-        for (String fieldName : custom.fields) {
-            String name = safe(fieldName).trim();
-            if (name.isEmpty()) continue;
-            EditText editor = field(name, draft.get(name));
-            container.addView(boldLabel(name));
-            container.addView(editor);
-            editors.put(name, editor);
         }
     }
 
@@ -2032,10 +1542,6 @@ public class MainActivity extends Activity implements
         return s.isEmpty() ? "Keepriva-export" : s;
     }
 
-    private EditText phoneField(String hint, String value) {
-        return viewFactory.phoneField(hint, value);
-    }
-
     private LinearLayout baseVertical(int gapDp) {
         return viewFactory.verticalContainer(gapDp);
     }
@@ -2054,55 +1560,6 @@ public class MainActivity extends Activity implements
 
     private TextView boldLabel(String text) {
         return viewFactory.boldLabel(text);
-    }
-
-    private void addLabelValue(LinearLayout body, String label, String value) {
-        body.addView(boldLabel(label)); body.addView(subtitle(value));
-    }
-
-    private void addNonEmptyLabelValue(LinearLayout body, String label, String value) {
-        if (value != null && !value.trim().isEmpty()) addLabelValue(body, label, value);
-    }
-    private void addSensitiveCustomField(LinearLayout body, String label, String value) {
-        if (value == null || value.trim().isEmpty()) return;
-
-        body.addView(boldLabel(label + " (sensitive)"));
-
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-
-        TextView display = new TextView(this);
-        display.setText("••••••••••••");
-        display.setTextSize(17);
-        display.setPadding(0, dp(4), dp(8), dp(8));
-        UiStyle.styleBodyText(display);
-        row.addView(display, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
-
-        final boolean[] visible = {false};
-        Button show = button("Show");
-        show.setOnClickListener(v -> {
-            visible[0] = !visible[0];
-            display.setText(visible[0] ? value : "••••••••••••");
-            show.setText(visible[0] ? "Hide" : "Show");
-        });
-        row.addView(show);
-
-        Button copy = button("Copy");
-        copy.setContentDescription("Copy sensitive field securely");
-        copy.setOnClickListener(v -> copySensitiveCustomFieldToClipboard(value));
-        row.addView(copy);
-
-        body.addView(row);
-    }
-
-    private void copySensitiveCustomFieldToClipboard(String value) {
-        if (value == null || value.isEmpty()) return;
-        long timeout = getClipboardTimeoutMs();
-        clipboardSecurity.copySensitive("Keepriva sensitive field", value, timeout);
-        toast(timeout == ClipboardSecurityManager.NEVER_CLEAR
-                ? "Sensitive field copied. Clipboard auto-clear is disabled."
-                : "Sensitive field copied. It will be cleared in " + (timeout / 1000L) + " seconds.");
     }
 
     private EditText field(String hint, String value) {
@@ -2205,5 +1662,39 @@ public class MainActivity extends Activity implements
 
     private int dp(int v) { return viewFactory.dp(v); }
     private void toast(String s) { Toast.makeText(this, s, Toast.LENGTH_LONG).show(); }
+    @Override public long saveItem(VaultItem item) throws Exception {
+        return database.save(item, vaultSession.requireKey());
+    }
+
+    @Override public void deleteItem(long itemId) { database.delete(itemId); }
+
+    @Override public void exportItem(long itemId) {
+        VaultItem item = findItem(itemId);
+        if (item != null) showExportFormatChooser(Collections.singletonList(item), item.title);
+    }
+
+    @Override public void copySensitiveField(String value) {
+        if (value == null || value.isEmpty()) return;
+        long timeout = getClipboardTimeoutMs();
+        clipboardSecurity.copySensitive("Keepriva sensitive field", value, timeout);
+        toast(timeout == ClipboardSecurityManager.NEVER_CLEAR
+                ? "Sensitive field copied. Clipboard auto-clear is disabled."
+                : "Sensitive field copied. It will be cleared in " + (timeout / 1000L) + " seconds.");
+    }
+
+    @Override public boolean isSessionActive() { return vaultSession.isUnlocked(); }
+
+    @Override public void onItemSaved(long itemId, String categoryName) {
+        selectedHomeCategory = categoryName;
+        browserController.selectCategory(categoryName, true);
+        loadItems();
+    }
+
+    @Override public void onItemDeleted(long itemId) { loadItems(); }
+
+    @Override public void onItemRestored(long itemId) { loadItems(); }
+
+    @Override public void onItemDialogClosed() { }
+
     private static String safe(String s) { return s == null ? "" : s; }
 }

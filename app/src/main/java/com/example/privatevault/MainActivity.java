@@ -1,7 +1,6 @@
 package com.example.privatevault;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.hardware.biometrics.BiometricPrompt;
 import android.content.Context;
 import android.content.BroadcastReceiver;
@@ -14,30 +13,16 @@ import android.os.CancellationSignal;
 import android.util.Base64;
 import android.view.Gravity;
 import android.view.View;
-import android.widget.AdapterView;
-import android.widget.ArrayAdapter;
 import android.widget.Button;
-import android.widget.CheckBox;
-import android.widget.EditText;
 import android.widget.FrameLayout;
-import android.widget.ImageButton;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
-import android.widget.Spinner;
-import android.widget.TextView;
 import android.widget.Toast;
 
-import java.io.OutputStream;
-import java.io.InputStream;
-import java.io.ByteArrayOutputStream;
-import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.Map;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
@@ -105,7 +90,6 @@ public class MainActivity extends Activity implements
     private List<VaultItem> allItems = new ArrayList<>();
     private List<CustomCategory> customCategories = new ArrayList<>();
     private long backgroundAt = 0L;
-    private boolean explicitlyLocked = true;
     private ClipboardSecurityManager clipboardSecurity;
     // PBKDF2 deliberately uses a high work factor; never derive on the UI thread.
     private final ExecutorService unlockExecutor = Executors.newSingleThreadExecutor();
@@ -130,6 +114,15 @@ public class MainActivity extends Activity implements
             showReleaseSecurityBlock(releaseSecurity.message);
             return;
         }
+        composeControllers();
+        database = new VaultDatabase(this);
+        clipboardSecurity = new ClipboardSecurityManager(this);
+        registerScreenOffReceiver();
+        if (isConfigured()) showUnlockScreen(); else showSetupScreen();
+    }
+
+    /** Feature owners are constructed together only after release-security verification. */
+    private void composeControllers() {
         securityPreferences = new VaultSecurityPreferences(getSharedPreferences(PREFS, MODE_PRIVATE));
         setupController = controllerRegistry.register(new SetupController(viewFactory, this, this));
         unlockController = controllerRegistry.register(new UnlockController(this, viewFactory, this, this));
@@ -144,10 +137,6 @@ public class MainActivity extends Activity implements
                 new ItemDialogController(this, viewFactory, dialogRegistry, this, this));
         dataTransferController = controllerRegistry.register(
                 new DataTransferController(this, viewFactory, dialogRegistry, this, this));
-        database = new VaultDatabase(this);
-        clipboardSecurity = new ClipboardSecurityManager(this);
-        registerScreenOffReceiver();
-        if (isConfigured()) showUnlockScreen(); else showSetupScreen();
     }
 
     @Override
@@ -184,14 +173,12 @@ public class MainActivity extends Activity implements
 
     @Override
     protected void onDestroy() {
-        callbackGeneration.invalidate();
-        controllerRegistry.close();
+        clearSessionAndControllers(true);
         if (screenOffReceiverRegistered) {
             try { unregisterReceiver(screenOffReceiver); } catch (Exception ignored) { }
             screenOffReceiverRegistered = false;
         }
         unlockExecutor.shutdownNow();
-        clearSessionState();
         super.onDestroy();
     }
 
@@ -207,16 +194,16 @@ public class MainActivity extends Activity implements
     }
 
     private void showReleaseSecurityBlock(String message) {
-        LinearLayout root = baseVertical(24);
+        LinearLayout root = viewFactory.verticalContainer(24);
         root.setGravity(Gravity.CENTER_HORIZONTAL);
-        root.addView(title("Security verification failed"));
-        root.addView(subtitle(message + "\n\nInstall an official signed build of Keepriva."));
-        Button close = button("Close app");
+        root.addView(viewFactory.title("Security verification failed"));
+        root.addView(viewFactory.subtitle(message + "\n\nInstall an official signed build of Keepriva."));
+        Button close = viewFactory.secondaryButton("Close app");
         close.setOnClickListener(v -> finishAndRemoveTask());
         root.addView(close);
         VaultNavigationState state = VaultNavigationState.root(VaultScreen.ERROR);
         screenRouter.reset(state);
-        renderRootScreen(wrap(root), state);
+        renderRootScreen(viewFactory.scroll(root), state);
     }
 
     private boolean isConfigured() {
@@ -236,8 +223,6 @@ public class MainActivity extends Activity implements
     }
 
     private void showUnlockScreen() {
-        vaultSession.clear();
-        explicitlyLocked = true;
         VaultNavigationState state = VaultNavigationState.root(VaultScreen.UNLOCK);
         screenRouter.reset(state);
         renderRootScreen(unlockController.createView(isBiometricUnlockConfigured()), state);
@@ -249,7 +234,6 @@ public class MainActivity extends Activity implements
 
     @Override
     public void onSetupCompleted() {
-        explicitlyLocked = false;
         showVaultScreen();
     }
 
@@ -328,7 +312,6 @@ public class MainActivity extends Activity implements
 
     @Override
     public void onUnlockCompleted() {
-        explicitlyLocked = false;
         backgroundAt = 0;
         showVaultScreen();
     }
@@ -608,25 +591,9 @@ public class MainActivity extends Activity implements
         return categoryHierarchy.path(categoryName, customCategories);
     }
 
-    private boolean isDescendantOf(String candidateName, String ancestorName) {
-        return categoryHierarchy.isDescendantOf(candidateName, ancestorName, customCategories);
-    }
-
     /** Returns null when valid, otherwise a user-facing hierarchy validation error. */
     private String validateCategoryHierarchy(List<CustomCategory> categories, int maxDepth) {
         return categoryHierarchy.validate(categories, maxDepth);
-    }
-
-    private void showPreferencesDialog() {
-        securitySettingsController.showPreferences();
-    }
-
-    private void requestMasterPasswordReauth(String purpose, Runnable onSuccess) {
-        securitySettingsController.requestMasterPasswordReauth(purpose, onSuccess);
-    }
-
-    private void showSecuritySettings() {
-        securitySettingsController.showSecuritySettings();
     }
 
     private long getClipboardTimeoutMs() {
@@ -708,12 +675,13 @@ public class MainActivity extends Activity implements
 
     private void lockVault() {
         if (clipboardSecurity != null) clipboardSecurity.clearSensitiveClipboardNow();
-        clearSessionState();
-        explicitlyLocked = true;
+        clearSessionAndControllers(false);
         backgroundAt = 0;
         showUnlockScreen();
     }
-    private void clearSessionState() {
+
+    /** Idempotent session cleanup shared by lock, vault-load failure and destruction. */
+    private void clearSessionAndControllers(boolean destroying) {
         callbackGeneration.invalidate();
         dialogRegistry.dismissAll();
         screenRouter.clear();
@@ -724,6 +692,7 @@ public class MainActivity extends Activity implements
         selectedHomeCategory = "All";
         if (dataTransferController != null) dataTransferController.clearSessionState();
         activityResults.clear();
+        if (destroying) controllerRegistry.close();
     }
     private void showVaultScreen() {
         if (!vaultSession.isUnlocked()) {
@@ -795,12 +764,13 @@ public class MainActivity extends Activity implements
 
     @Override
     public void onPreferencesRequested() {
-        showPreferencesDialog();
+        securitySettingsController.showPreferences();
     }
 
     @Override
     public void onSecurityRequested() {
-        requestMasterPasswordReauth("Security settings", this::showSecuritySettings);
+        securitySettingsController.requestMasterPasswordReauth(
+                "Security settings", securitySettingsController::showSecuritySettings);
     }
 
     @Override
@@ -942,54 +912,6 @@ public class MainActivity extends Activity implements
                 .apply();
     }
 
-    private LinearLayout baseVertical(int gapDp) {
-        return viewFactory.verticalContainer(gapDp);
-    }
-
-    private ScrollView wrap(View child) {
-        return viewFactory.scroll(child);
-    }
-
-    private TextView title(String text) {
-        return viewFactory.title(text);
-    }
-
-    private TextView subtitle(String text) {
-        return viewFactory.subtitle(text);
-    }
-
-    private TextView boldLabel(String text) {
-        return viewFactory.boldLabel(text);
-    }
-
-    private EditText field(String hint, String value) {
-        return viewFactory.field(hint, value);
-    }
-
-    private EditText passwordField(String hint) {
-        return viewFactory.passwordField(hint);
-    }
-
-    private Button button(String text) {
-        return viewFactory.secondaryButton(text);
-    }
-
-    private Button primaryButton(String text) {
-        return viewFactory.primaryButton(text);
-    }
-
-    private ImageButton smallIconButton(int iconRes, String description, boolean danger) {
-        return viewFactory.smallIconButton(iconRes, description, danger);
-    }
-
-    private LinearLayout.LayoutParams matchWidth() {
-        return viewFactory.matchWidth();
-    }
-
-    private AlertDialog showDialog(AlertDialog dialog) {
-        return dialogRegistry.show(dialog);
-    }
-
     /** Replaces only the child of the activity-owned root; setContentView is called once. */
     private void renderRootScreen(View screen, VaultNavigationState state) {
         if (rootRenderer == null) {
@@ -1013,8 +935,7 @@ public class MainActivity extends Activity implements
 
     private void showVaultLoadError() {
         // Never retain a key or decrypted models after a database/decryption failure.
-        clearSessionState();
-        explicitlyLocked = true;
+        clearSessionAndControllers(false);
         backgroundAt = 0L;
 
         VaultNavigationState state = VaultNavigationState.root(VaultScreen.ERROR);
@@ -1060,7 +981,6 @@ public class MainActivity extends Activity implements
         if (vaultSession.isUnlocked() && getLockOnScreenOff()) lockVault();
     }
 
-    private int dp(int v) { return viewFactory.dp(v); }
     private void toast(String s) { Toast.makeText(this, s, Toast.LENGTH_LONG).show(); }
     @Override public long saveItem(VaultItem item) throws Exception {
         return database.save(item, vaultSession.requireKey());
@@ -1099,7 +1019,8 @@ public class MainActivity extends Activity implements
     @Override public List<VaultItem> itemsForExport(String category) {
         List<VaultItem> selected = new ArrayList<>();
         for (VaultItem item : allItems) {
-            if ("All".equals(category) || isDescendantOf(item.category, category)) selected.add(item);
+            if ("All".equals(category)
+                    || categoryHierarchy.isDescendantOf(item.category, category, customCategories)) selected.add(item);
         }
         return selected;
     }

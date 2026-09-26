@@ -13,6 +13,8 @@ import android.os.Parcelable;
 
 import java.io.Serializable;
 import java.lang.reflect.Modifier;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -299,6 +301,25 @@ public class Phase2AArchitectureTest {
             assertTrue("Picker coordinator contains only an operation or timestamp",
                     field.getType() == TransferOperation.class || field.getType() == long.class);
         });
+    }
+
+    @Test
+    public void waveEActivity_keepsOneRootAndNoFeatureDialogConstruction() throws Exception {
+        Path activity = Path.of("src/main/java/com/example/privatevault/MainActivity.java");
+        if (!Files.exists(activity)) {
+            activity = Path.of("app/src/main/java/com/example/privatevault/MainActivity.java");
+        }
+        String source = Files.readString(activity);
+        assertTrue("MainActivity exceeded the Phase 2A limit", source.lines().count() <= 1200);
+        assertEquals("Activity root must be installed once", 1,
+                source.split("setContentView\\(", -1).length - 1);
+        assertFalse("Feature dialogs belong to their controllers",
+                source.contains("new AlertDialog.Builder"));
+        assertTrue("Controller construction must follow release verification",
+                source.indexOf("composeControllers();") > source.indexOf("if (!releaseSecurity.ok)"));
+        assertTrue("Lock, load failure and destruction share teardown",
+                source.contains("clearSessionAndControllers(false)")
+                        && source.contains("clearSessionAndControllers(true)"));
     }
 
     private static final class FakeDialog implements DialogRegistry.DialogHandle {

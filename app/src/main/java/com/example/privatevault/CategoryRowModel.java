@@ -11,6 +11,7 @@ public final class CategoryRowModel {
     public final int entryCount;
     public final int depth;
     public final boolean expanded;
+    public final String iconFamily;
 
     public CategoryRowModel(
             String name,
@@ -18,11 +19,22 @@ public final class CategoryRowModel {
             int entryCount,
             int depth,
             boolean expanded) {
+        this(name, label, entryCount, depth, expanded, "Custom");
+    }
+
+    public CategoryRowModel(
+            String name,
+            String label,
+            int entryCount,
+            int depth,
+            boolean expanded,
+            String iconFamily) {
         this.name = safe(name);
         this.label = safe(label);
         this.entryCount = Math.max(0, entryCount);
         this.depth = Math.max(0, depth);
         this.expanded = expanded;
+        this.iconFamily = safe(iconFamily).isEmpty() ? "Custom" : iconFamily;
         this.stableId = stableIdFor(this.name);
     }
 
@@ -40,4 +52,3 @@ public final class CategoryRowModel {
         return value == null ? "" : value;
     }
 }
-

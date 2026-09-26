@@ -131,26 +131,7 @@ final class VaultBrowserModelBuilder {
     }
 
     static String iconFamily(String categoryName, List<CustomCategory> categories) {
-        String current = safe(categoryName).trim();
-        Set<String> visited = new HashSet<>();
-        while (!current.isEmpty() && visited.add(current.toLowerCase(Locale.ROOT))) {
-            String lower = current.toLowerCase(Locale.ROOT);
-            if ("login".equals(lower)) return "Login";
-            if ("website".equals(lower)) return "Website";
-            if ("app".equals(lower)) return "App";
-            if ("contact".equals(lower)) return "Contact";
-            if ("banking".equals(lower)) return "Banking";
-            if ("work".equals(lower)) return "Work";
-            if ("personal".equals(lower)) return "Personal";
-            if ("secure note".equals(lower)) return "Secure Note";
-            if ("other".equals(lower)) return "Other";
-            CustomCategory custom = findCategory(current, categories);
-            if (custom == null) break;
-            String parent = safe(custom.parentName).trim();
-            if (parent.isEmpty()) return "Custom";
-            current = parent;
-        }
-        return "Custom";
+        return VaultCategoryIconResolver.resolve(categoryName, categories);
     }
 
     private static VaultBrowserModel.ItemRow itemRow(

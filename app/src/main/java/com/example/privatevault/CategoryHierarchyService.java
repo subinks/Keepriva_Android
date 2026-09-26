@@ -70,6 +70,39 @@ final class CategoryHierarchyService {
         return String.join(" / ", parts);
     }
 
+    /** Returns direct custom children only, sorted for deterministic browser presentation. */
+    List<CustomCategory> directChildren(
+            String parentCategoryName, List<CustomCategory> categories) {
+        String parent = safe(parentCategoryName).trim();
+        List<CustomCategory> children = new ArrayList<>();
+        for (CustomCategory category : safeCategories(categories)) {
+            if (safe(category.parentName).trim().equalsIgnoreCase(parent)) {
+                children.add(category);
+            }
+        }
+        children.sort((left, right) -> safe(left.name).compareToIgnoreCase(safe(right.name)));
+        return Collections.unmodifiableList(children);
+    }
+
+    /** Returns the browser parent; All is the virtual parent of every root category. */
+    String browserParent(String categoryName, List<CustomCategory> categories) {
+        String name = safe(categoryName).trim();
+        if (name.isEmpty() || "All".equalsIgnoreCase(name)) return "";
+        if (isBuiltIn(name)) return "All";
+        CustomCategory category = find(name, categories);
+        if (category == null) return "All";
+        String parent = safe(category.parentName).trim();
+        return parent.isEmpty() ? "All" : parent;
+    }
+
+    /** Returns a complete browser breadcrumb rooted at the virtual All category. */
+    String browserPath(String categoryName, List<CustomCategory> categories) {
+        String name = safe(categoryName).trim();
+        if (name.isEmpty() || "All".equalsIgnoreCase(name)) return "All";
+        String categoryPath = path(name, categories);
+        return categoryPath.isEmpty() ? "All" : "All / " + categoryPath;
+    }
+
     boolean isDescendantOf(
             String candidateName, String ancestorName, List<CustomCategory> categories) {
         String current = safe(candidateName).trim();

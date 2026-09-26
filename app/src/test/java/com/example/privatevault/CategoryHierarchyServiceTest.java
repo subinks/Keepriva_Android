@@ -74,6 +74,35 @@ public class CategoryHierarchyServiceTest {
                 category(2L, "Project", "Team")), 4));
     }
 
+    @Test
+    public void directChildrenAreCaseInsensitiveAndSortedWithoutDescendants() {
+        List<CustomCategory> categories = Arrays.asList(
+                category(1L, "Zulu", "Work"),
+                category(2L, "Alpha", "work"),
+                category(3L, "Nested", "Alpha"),
+                category(4L, "Root", ""));
+
+        List<CustomCategory> children = service.directChildren("WORK", categories);
+
+        assertEquals(2, children.size());
+        assertEquals("Alpha", children.get(0).name);
+        assertEquals("Zulu", children.get(1).name);
+    }
+
+    @Test
+    public void browserParentAndPathUseVirtualAllRoot() {
+        List<CustomCategory> categories = Arrays.asList(
+                category(1L, "Root", ""),
+                category(2L, "Team", "Work"),
+                category(3L, "Project", "Team"));
+
+        assertEquals("", service.browserParent("All", categories));
+        assertEquals("All", service.browserParent("Root", categories));
+        assertEquals("All", service.browserParent("Work", categories));
+        assertEquals("Team", service.browserParent("Project", categories));
+        assertEquals("All / Work / Team / Project", service.browserPath("Project", categories));
+    }
+
     private static CustomCategory category(long id, String name, String parent) {
         CustomCategory category = new CustomCategory();
         category.id = id;

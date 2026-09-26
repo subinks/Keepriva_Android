@@ -309,8 +309,7 @@ public abstract class KeeprivaTestBase {
                         : activity.getWindow().getDecorView();
                 focused.set(decor != null
                         && decor.isAttachedToWindow()
-                        && decor.hasWindowFocus()
-                        && !decor.isLayoutRequested());
+                        && decor.hasWindowFocus());
             });
 
             if (focused.get()) {

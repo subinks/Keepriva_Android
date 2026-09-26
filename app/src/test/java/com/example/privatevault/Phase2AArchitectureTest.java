@@ -338,6 +338,11 @@ public class Phase2AArchitectureTest {
         assertTrue("Every ActivityScenario launch must wait for stable window focus",
                 base.contains("scenario.moveToState(Lifecycle.State.RESUMED);\n"
                         + "            waitForActivityWindowFocus();"));
+        assertTrue("Window readiness must require attachment and actual focus",
+                base.contains("decor.isAttachedToWindow()")
+                        && base.contains("decor.hasWindowFocus()"));
+        assertFalse("A pending layout is valid and must not block Activity readiness",
+                base.contains("!decor.isLayoutRequested()"));
         assertTrue("Intent initialization needs a pre-launch hook",
                 base.contains("protected void beforeActivityLaunch()"));
         assertTrue("Intent release needs a post-close hook",

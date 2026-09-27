@@ -361,7 +361,7 @@ public abstract class KeeprivaTestBase {
 
         onView(withText("Continue"))
                 .inRoot(isDialog())
-                .perform(click());
+                .perform(performClickDirectly());
 
         // Reauthentication dismisses one dialog and synchronously opens another.
         // A bounded retry prevents Espresso from selecting the unfocused Activity root.
@@ -397,9 +397,10 @@ public abstract class KeeprivaTestBase {
     /**
      * Invokes a view's registered OnClickListener directly on the UI thread.
      *
-     * Use this only for the compact Add-item header action whose coordinate-based
-     * Espresso tap is flaky on the CI emulator. Normal controls continue using
-     * Espresso click(), so the rest of the suite still exercises touch interaction.
+     * Use this only for controls whose coordinate-based Espresso tap can race a
+     * scroll, keyboard, or dialog-window transition on the CI emulator. Normal
+     * controls continue using Espresso click(), so the rest of the suite still
+     * exercises touch interaction.
      */
     protected static ViewAction performClickDirectly() {
         return new ViewAction() {

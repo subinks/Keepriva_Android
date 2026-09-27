@@ -221,7 +221,12 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
 
         onView(withText("Restore encrypted .pvault backup"))
                 .inRoot(isDialog())
-                .perform(click());
+                .perform(scrollTo(), performClickDirectly());
+
+        // The first dialog is dismissed and its replacement is attached to a
+        // new window. Wait for that focused dialog instead of asserting during
+        // the window hand-off on slower CI emulators.
+        waitForDialogText("Restore encrypted backup");
 
         onView(withText("Restore encrypted backup"))
                 .inRoot(isDialog())

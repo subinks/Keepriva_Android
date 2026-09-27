@@ -221,7 +221,7 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
 
         onView(withText("Restore encrypted .pvault backup"))
                 .inRoot(isDialog())
-                .perform(scrollTo(), performClickDirectly());
+                .perform(performClickDirectly());
 
         // The first dialog is dismissed and its replacement is attached to a
         // new window. Wait for that focused dialog instead of asserting during

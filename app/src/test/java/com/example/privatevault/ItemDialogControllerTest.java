@@ -1,11 +1,52 @@
 package com.example.privatevault;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotSame;
+import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
 public class ItemDialogControllerTest {
+    @Test
+    public void dialogWorkflow_closesExactlyOnce() {
+        ItemDialogController.DialogWorkflow workflow =
+                new ItemDialogController.DialogWorkflow();
+
+        workflow.start();
+
+        assertTrue(workflow.isActiveForTesting());
+        assertTrue(workflow.onDismissed());
+        assertFalse(workflow.onDismissed());
+        assertFalse(workflow.isActiveForTesting());
+    }
+
+    @Test
+    public void dialogWorkflow_internalTransitionDoesNotCloseRoute() {
+        ItemDialogController.DialogWorkflow workflow =
+                new ItemDialogController.DialogWorkflow();
+
+        workflow.start();
+        workflow.beginTransition();
+
+        assertFalse(workflow.onDismissed());
+        assertTrue(workflow.isActiveForTesting());
+        assertTrue(workflow.onDismissed());
+        assertFalse(workflow.isActiveForTesting());
+    }
+
+    @Test
+    public void dialogWorkflow_clearInvalidatesLateDismissCallback() {
+        ItemDialogController.DialogWorkflow workflow =
+                new ItemDialogController.DialogWorkflow();
+
+        workflow.start();
+        workflow.clear();
+
+        assertFalse(workflow.onDismissed());
+        assertFalse(workflow.isActiveForTesting());
+    }
+
     @Test
     public void undoSnapshotCopiesFieldsAndRestoresAsNewRow() {
         VaultItem original = new VaultItem();

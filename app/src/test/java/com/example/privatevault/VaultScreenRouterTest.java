@@ -59,6 +59,23 @@ public class VaultScreenRouterTest {
     }
 
     @Test
+    public void detailsToEditor_replacesModalRouteAndKeepsOneBrowserHistoryEntry() {
+        VaultScreenRouter router = new VaultScreenRouter();
+        VaultNavigationState browser = VaultNavigationState.vaultBrowser("Work", "", 210);
+        router.reset(browser);
+        router.navigate(browser.forScreen(VaultScreen.ITEM_DETAILS).withSelectedItemId(42L));
+
+        VaultNavigationState editor = router.currentState()
+                .forScreen(VaultScreen.ITEM_EDITOR)
+                .withSelectedItemId(42L);
+        router.replaceCurrent(editor);
+
+        assertEquals(VaultScreen.ITEM_EDITOR, router.currentState().screen());
+        assertEquals(1, router.backStackSize());
+        assertEquals(browser, router.goBack());
+    }
+
+    @Test
     public void replaceCurrent_updatesStateWithoutAddingHistory() {
         VaultScreenRouter router = new VaultScreenRouter();
         router.reset(VaultNavigationState.vaultBrowser("All", "", 0));

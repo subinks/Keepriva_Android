@@ -44,6 +44,7 @@ final class ItemDialogController implements VaultController {
     private final DialogRegistry dialogRegistry;
     private final Gateway gateway;
     private final ItemDialogActions actions;
+    private final DialogWorkflow dialogWorkflow = new DialogWorkflow();
     private boolean closed;
 
     ItemDialogController(Activity activity, VaultViewFactory views, DialogRegistry dialogRegistry,
@@ -58,19 +59,28 @@ final class ItemDialogController implements VaultController {
     void showDetails(long itemId) {
         if (!active()) return;
         VaultItem item = gateway.findItem(itemId);
-        if (item != null) renderDetails(item);
+        if (item != null) {
+            dialogWorkflow.start();
+            renderDetails(item);
+        }
     }
 
     void showEditor(Long itemId, String initialCategory) {
         if (!active()) return;
         VaultItem item = itemId == null ? null : gateway.findItem(itemId);
         if (itemId != null && item == null) return;
+        dialogWorkflow.start();
         renderEditor(item, initialCategory);
     }
 
     private boolean active() { return !closed && gateway.isSessionActive(); }
 
-    @Override public void close() { closed = true; }
+    void clearSessionState() { dialogWorkflow.clear(); }
+
+    @Override public void close() {
+        closed = true;
+        clearSessionState();
+    }
 
     private static String safe(String value) { return value == null ? "" : value; }
     private int dp(int value) { return views.dp(value); }
@@ -88,6 +98,12 @@ final class ItemDialogController implements VaultController {
     }
     private LinearLayout.LayoutParams matchWidth() { return views.matchWidth(); }
     private AlertDialog showDialog(AlertDialog dialog) { return dialogRegistry.show(dialog); }
+    private AlertDialog showWorkflowDialog(AlertDialog dialog) {
+        dialog.setOnDismissListener(ignored -> {
+            if (dialogWorkflow.onDismissed() && !closed) actions.onItemDialogClosed();
+        });
+        return showDialog(dialog);
+    }
     private String categoryPath(String category) { return gateway.categoryPath(category); }
     private List<String> activeBuiltInCategories() { return gateway.activeBuiltInCategories(); }
 
@@ -196,11 +212,17 @@ final class ItemDialogController implements VaultController {
                 .setTitle(item.title.isEmpty() ? "Vault item" : item.title)
                 .setView(wrap(body))
                 .create();
-        editItem.setOnClickListener(v -> { d.dismiss(); showEditor(item.id, null); });
+        editItem.setOnClickListener(v -> {
+            if (!active()) return;
+            dialogWorkflow.beginTransition();
+            actions.onItemEditorOpened(item.id);
+            d.dismiss();
+            renderEditor(item, null);
+        });
         deleteItem.setOnClickListener(v -> confirmDelete(item, d));
         closeDetails.setOnClickListener(v -> d.dismiss());
         ScreenSecurityManager.protect(d);
-        showDialog(d);
+        showWorkflowDialog(d);
     }
 
     private void confirmDelete(VaultItem item, AlertDialog parent) {
@@ -212,6 +234,7 @@ final class ItemDialogController implements VaultController {
                 .setPositiveButton("Delete", (d, w) -> {
                     if (!active()) return;
                     gateway.deleteItem(item.id);
+                    dialogWorkflow.beginTransition();
                     parent.dismiss();
                     actions.onItemDeleted(item.id);
                     showUndoDeletedItem(deletedSnapshot);
@@ -241,7 +264,7 @@ final class ItemDialogController implements VaultController {
 
     private void showUndoDeletedItem(VaultItem deletedSnapshot) {
         if (!active()) return;
-        showDialog(new AlertDialog.Builder(activity)
+        AlertDialog undo = new AlertDialog.Builder(activity)
                 .setTitle("Item deleted")
                 .setMessage("\"" + safe(deletedSnapshot.title) + "\" was deleted.")
                 .setPositiveButton("Undo", (d, w) -> {
@@ -255,7 +278,9 @@ final class ItemDialogController implements VaultController {
                     }
                 })
                 .setNegativeButton("Dismiss", null)
-                .create());
+                .create();
+        ScreenSecurityManager.protect(undo);
+        showWorkflowDialog(undo);
     }
 
     private void renderEditor(VaultItem existing, String initialCategory) {
@@ -423,15 +448,47 @@ final class ItemDialogController implements VaultController {
             try {
                 if (!active()) return;
                 long savedId = gateway.saveItem(item);
-                d.dismiss();
                 ItemDialogController.this.actions.onItemSaved(savedId, item.category);
+                d.dismiss();
             } catch (Exception e) {
                 gateway.showMessage("Could not save encrypted item.");
             }
         });
 
         ScreenSecurityManager.protect(d);
-        showDialog(d);
+        showWorkflowDialog(d);
+    }
+
+    /** Pure state machine that makes a multi-dialog item workflow close exactly once. */
+    static final class DialogWorkflow {
+        private boolean active;
+        private boolean transitionPending;
+
+        void start() {
+            active = true;
+            transitionPending = false;
+        }
+
+        void beginTransition() {
+            if (active) transitionPending = true;
+        }
+
+        boolean onDismissed() {
+            if (!active) return false;
+            if (transitionPending) {
+                transitionPending = false;
+                return false;
+            }
+            active = false;
+            return true;
+        }
+
+        void clear() {
+            active = false;
+            transitionPending = false;
+        }
+
+        boolean isActiveForTesting() { return active; }
     }
 
     private void applyCategoryFormLayout(

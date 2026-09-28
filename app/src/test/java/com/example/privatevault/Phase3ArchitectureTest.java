@@ -1,12 +1,17 @@
 package com.example.privatevault;
 
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import org.junit.Test;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -43,5 +48,34 @@ public class Phase3ArchitectureTest {
         } catch (UnsupportedOperationException expected) {
             // Expected immutable contract.
         }
+    }
+
+    @Test
+    public void waveC1Navigation_isProcessMemoryOnlyAndLifecycleBound() throws Exception {
+        assertFalse(java.io.Serializable.class.isAssignableFrom(VaultNavigationState.class));
+        for (Class<?> contract : VaultNavigationState.class.getInterfaces()) {
+            assertFalse("android.os.Parcelable".equals(contract.getName()));
+        }
+
+        String activity = readProjectFile("src/main/java/com/example/privatevault/MainActivity.java");
+        String browser = readProjectFile(
+                "src/main/java/com/example/privatevault/VaultBrowserController.java");
+        String dialogs = readProjectFile(
+                "src/main/java/com/example/privatevault/ItemDialogController.java");
+
+        assertTrue(activity.contains("browserController.navigateToParentCategory()"));
+        assertTrue(activity.contains("screenRouter.navigate("));
+        assertTrue(activity.contains("browserController.restoreNavigationState(browserState)"));
+        assertTrue(activity.contains("itemDialogController.clearSessionState()"));
+        assertTrue(browser.contains("target.post(() ->"));
+        assertTrue(browser.contains("generation != renderGeneration"));
+        assertTrue(dialogs.contains("actions.onItemDialogClosed()"));
+        assertTrue(dialogs.contains("dialogWorkflow.beginTransition()"));
+    }
+
+    private static String readProjectFile(String relative) throws Exception {
+        Path path = Paths.get(relative);
+        if (!Files.exists(path)) path = Paths.get("app").resolve(relative);
+        return new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
     }
 }

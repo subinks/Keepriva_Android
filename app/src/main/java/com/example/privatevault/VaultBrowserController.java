@@ -36,6 +36,8 @@ final class VaultBrowserController implements VaultController {
     private TextView categoryHeading;
     private TextView itemHeading;
     private FrameLayout emptyContainer;
+    private boolean suppressNavigationEvents;
+    private int renderGeneration;
     private boolean closed;
 
     VaultBrowserController(Activity activity, DataSource dataSource, VaultBrowserActions actions) {
@@ -48,6 +50,7 @@ final class VaultBrowserController implements VaultController {
 
     View createView() {
         ensureOpen();
+        renderGeneration++;
         View root = LayoutInflater.from(activity).inflate(R.layout.view_vault_browser, null, false);
         scrollView = root.findViewById(R.id.vault_browser_scroll);
         toolbarTitle = root.findViewById(R.id.toolbar_title);
@@ -92,16 +95,77 @@ final class VaultBrowserController implements VaultController {
 
     void selectCategory(String categoryName, boolean ignoredLegacyExpandFlag) {
         ensureOpen();
-        selectedCategory = safe(categoryName).trim().isEmpty() ? "All" : categoryName.trim();
-        if (compatibilitySearch != null && compatibilitySearch.getText().length() > 0) {
-            compatibilitySearch.setText("");
+        suppressNavigationEvents = true;
+        try {
+            selectedCategory = normalizeCategory(categoryName);
+            if (compatibilitySearch != null && compatibilitySearch.getText().length() > 0) {
+                compatibilitySearch.setText("");
+            }
+            if (scrollView != null) scrollView.scrollTo(0, 0);
+            actions.onCategorySelected(selectedCategory);
+            render();
+        } finally {
+            suppressNavigationEvents = false;
         }
-        actions.onCategorySelected(selectedCategory);
-        render();
         emitNavigationState();
     }
 
+    boolean navigateToParentCategory() {
+        ensureOpen();
+        if ("All".equalsIgnoreCase(selectedCategory)) return false;
+        VaultBrowserViewState state = dataSource.browserState(selectedCategory);
+        selectCategory(state.parentCategory().isEmpty() ? "All" : state.parentCategory(), false);
+        return true;
+    }
+
+    VaultNavigationState snapshotNavigationState() {
+        ensureOpen();
+        return VaultNavigationState.vaultBrowser(
+                selectedCategory,
+                compatibilitySearch == null ? "" : compatibilitySearch.getText().toString(),
+                scrollView == null ? 0 : scrollView.getScrollY());
+    }
+
+    void restoreNavigationState(VaultNavigationState state) {
+        ensureOpen();
+        if (state == null || state.screen() != VaultScreen.VAULT_BROWSER) {
+            throw new IllegalArgumentException("A vault-browser state is required");
+        }
+        suppressNavigationEvents = true;
+        try {
+            selectedCategory = normalizeCategory(state.currentCategory());
+            actions.onCategorySelected(selectedCategory);
+            if (compatibilitySearch != null
+                    && !compatibilitySearch.getText().toString().equals(state.searchQuery())) {
+                compatibilitySearch.setText(state.searchQuery());
+            }
+            render();
+        } finally {
+            suppressNavigationEvents = false;
+        }
+
+        ScrollView target = scrollView;
+        int generation = renderGeneration;
+        int position = state.listScrollPosition();
+        if (target == null) {
+            emitNavigationState();
+            return;
+        }
+        target.post(() -> {
+            if (closed || generation != renderGeneration || target != scrollView) return;
+            suppressNavigationEvents = true;
+            try {
+                target.scrollTo(0, position);
+            } finally {
+                suppressNavigationEvents = false;
+            }
+            emitNavigationState();
+        });
+    }
+
     void clearSessionState() {
+        renderGeneration++;
+        suppressNavigationEvents = false;
         selectedCategory = "All";
         categoryAdapter.submitRows(null);
         itemAdapter.submitRows(null);
@@ -265,7 +329,7 @@ final class VaultBrowserController implements VaultController {
     }
 
     private void emitNavigationState() {
-        if (closed) return;
+        if (closed || suppressNavigationEvents) return;
         actions.onBrowserNavigationChanged(
                 selectedCategory,
                 compatibilitySearch == null ? "" : compatibilitySearch.getText().toString(),
@@ -284,6 +348,11 @@ final class VaultBrowserController implements VaultController {
 
     private static String safe(String value) {
         return value == null ? "" : value;
+    }
+
+    private static String normalizeCategory(String value) {
+        String normalized = safe(value).trim();
+        return normalized.isEmpty() ? "All" : normalized;
     }
 
     interface DataSource {

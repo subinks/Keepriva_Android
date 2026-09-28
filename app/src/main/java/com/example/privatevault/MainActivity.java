@@ -91,6 +91,7 @@ public class MainActivity extends Activity implements
     private List<CustomCategory> customCategories = new ArrayList<>();
     private long backgroundAt = 0L;
     private ClipboardSecurityManager clipboardSecurity;
+    private boolean sessionCleanupInProgress;
     // PBKDF2 deliberately uses a high work factor; never derive on the UI thread.
     private final ExecutorService unlockExecutor = Executors.newSingleThreadExecutor();
     private boolean screenOffReceiverRegistered = false;
@@ -180,6 +181,18 @@ public class MainActivity extends Activity implements
         }
         unlockExecutor.shutdownNow();
         super.onDestroy();
+    }
+
+    @Override
+    public void onBackPressed() {
+        VaultNavigationState current = screenRouter.currentState();
+        if (vaultSession.isUnlocked()
+                && current != null
+                && current.screen() == VaultScreen.VAULT_BROWSER
+                && browserController.navigateToParentCategory()) {
+            return;
+        }
+        super.onBackPressed();
     }
 
     private void registerScreenOffReceiver() {
@@ -682,17 +695,23 @@ public class MainActivity extends Activity implements
 
     /** Idempotent session cleanup shared by lock, vault-load failure and destruction. */
     private void clearSessionAndControllers(boolean destroying) {
-        callbackGeneration.invalidate();
-        dialogRegistry.dismissAll();
-        screenRouter.clear();
-        vaultSession.clear();
-        allItems.clear();
-        customCategories.clear();
-        if (browserController != null) browserController.clearSessionState();
-        selectedHomeCategory = "All";
-        if (dataTransferController != null) dataTransferController.clearSessionState();
-        activityResults.clear();
-        if (destroying) controllerRegistry.close();
+        sessionCleanupInProgress = true;
+        try {
+            callbackGeneration.invalidate();
+            if (itemDialogController != null) itemDialogController.clearSessionState();
+            if (browserController != null) browserController.clearSessionState();
+            screenRouter.clear();
+            vaultSession.clear();
+            allItems.clear();
+            customCategories.clear();
+            selectedHomeCategory = "All";
+            if (dataTransferController != null) dataTransferController.clearSessionState();
+            activityResults.clear();
+            dialogRegistry.dismissAll();
+            if (destroying) controllerRegistry.close();
+        } finally {
+            sessionCleanupInProgress = false;
+        }
     }
     private void showVaultScreen() {
         if (!vaultSession.isUnlocked()) {
@@ -739,12 +758,23 @@ public class MainActivity extends Activity implements
 
     @Override
     public void onItemSelected(long itemId) {
+        if (findItem(itemId) == null) return;
+        pushItemRoute(VaultScreen.ITEM_DETAILS, itemId);
         itemDialogController.showDetails(itemId);
     }
 
     @Override
     public void onAddEntryRequested(String categoryName) {
+        pushItemRoute(VaultScreen.ITEM_EDITOR, VaultNavigationState.NO_ID);
         itemDialogController.showEditor(null, safe(categoryName).isEmpty() ? "Login" : categoryName);
+    }
+
+    private void pushItemRoute(VaultScreen destination, long itemId) {
+        VaultNavigationState browserState = browserController.snapshotNavigationState();
+        VaultNavigationState current = screenRouter.currentState();
+        if (current == null || current.screen() != VaultScreen.VAULT_BROWSER) return;
+        screenRouter.replaceCurrent(browserState);
+        screenRouter.navigate(browserState.forScreen(destination).withSelectedItemId(itemId));
     }
 
     @Override
@@ -1015,17 +1045,36 @@ public class MainActivity extends Activity implements
 
     @Override public boolean isSessionActive() { return vaultSession.isUnlocked(); }
 
-    @Override public void onItemSaved(long itemId, String categoryName) {
-        selectedHomeCategory = categoryName;
-        browserController.selectCategory(categoryName, true);
-        loadItems();
+    @Override public void onItemEditorOpened(long itemId) {
+        VaultNavigationState current = screenRouter.currentState();
+        if (current == null || current.screen() != VaultScreen.ITEM_DETAILS) return;
+        screenRouter.replaceCurrent(current
+                .forScreen(VaultScreen.ITEM_EDITOR)
+                .withSelectedItemId(itemId));
     }
+
+    @Override public void onItemSaved(long itemId, String categoryName) { loadItems(); }
 
     @Override public void onItemDeleted(long itemId) { loadItems(); }
 
     @Override public void onItemRestored(long itemId) { loadItems(); }
 
-    @Override public void onItemDialogClosed() { }
+    @Override public void onItemDialogClosed() {
+        if (sessionCleanupInProgress || !vaultSession.isUnlocked()) return;
+        VaultNavigationState current = screenRouter.currentState();
+        if (current == null
+                || (current.screen() != VaultScreen.ITEM_DETAILS
+                && current.screen() != VaultScreen.ITEM_EDITOR)
+                || !screenRouter.canGoBack()) {
+            return;
+        }
+        VaultNavigationState browserState = screenRouter.goBack();
+        if (browserState == null || browserState.screen() != VaultScreen.VAULT_BROWSER) return;
+        selectedHomeCategory = safe(browserState.currentCategory()).isEmpty()
+                ? "All"
+                : browserState.currentCategory();
+        browserController.restoreNavigationState(browserState);
+    }
 
     @Override public List<VaultItem> itemsForExport(String category) {
         List<VaultItem> selected = new ArrayList<>();

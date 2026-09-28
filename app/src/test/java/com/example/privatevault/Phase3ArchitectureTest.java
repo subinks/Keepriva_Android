@@ -62,12 +62,12 @@ public class Phase3ArchitectureTest {
                 "src/main/java/com/example/privatevault/VaultBrowserController.java");
         String dialogs = readProjectFile(
                 "src/main/java/com/example/privatevault/ItemDialogController.java");
+        String manifest = readProjectFile("src/main/AndroidManifest.xml");
 
         assertTrue(activity.contains("browserController.navigateToParentCategory()"));
-        assertTrue(activity.contains("registerBackNavigationCallback();"));
-        assertTrue(activity.contains("unregisterBackNavigationCallback();"));
-        assertTrue(activity.contains("getOnBackInvokedDispatcher().registerOnBackInvokedCallback("));
         assertTrue(activity.contains("@SuppressLint(\"GestureBackNavigation\")"));
+        assertFalse(activity.contains("registerOnBackInvokedCallback("));
+        assertTrue(manifest.contains("android:enableOnBackInvokedCallback=\"false\""));
         assertTrue(activity.contains("screenRouter.navigate("));
         assertTrue(activity.contains("browserController.restoreNavigationState(browserState)"));
         assertTrue(activity.contains("itemDialogController.clearSessionState()"));

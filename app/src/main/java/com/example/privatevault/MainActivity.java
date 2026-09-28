@@ -1,7 +1,6 @@
 package com.example.privatevault;
 
 import android.annotation.SuppressLint;
-import android.annotation.TargetApi;
 import android.app.Activity;
 import android.hardware.biometrics.BiometricPrompt;
 import android.content.Context;
@@ -10,7 +9,6 @@ import android.content.IntentFilter;
 import android.content.Intent;
 import android.net.Uri;
 import android.content.SharedPreferences;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.CancellationSignal;
 import android.util.Base64;
@@ -84,7 +82,6 @@ public class MainActivity extends Activity implements
     private UnlockController unlockController;
     private SecuritySettingsController securitySettingsController;
     private VaultBrowserController browserController;
-    private Object backInvokedCallback;
     private CategoryManagementController categoryManagementController;
     private ItemDialogController itemDialogController;
     private DataTransferController dataTransferController;
@@ -123,7 +120,6 @@ public class MainActivity extends Activity implements
         database = new VaultDatabase(this);
         clipboardSecurity = new ClipboardSecurityManager(this);
         registerScreenOffReceiver();
-        registerBackNavigationCallback();
         if (isConfigured()) showUnlockScreen(); else showSetupScreen();
     }
 
@@ -179,7 +175,6 @@ public class MainActivity extends Activity implements
 
     @Override
     protected void onDestroy() {
-        unregisterBackNavigationCallback();
         clearSessionAndControllers(true);
         if (screenOffReceiverRegistered) {
             try { unregisterReceiver(screenOffReceiver); } catch (Exception ignored) { }
@@ -201,33 +196,6 @@ public class MainActivity extends Activity implements
                 && current != null
                 && current.screen() == VaultScreen.VAULT_BROWSER
                 && browserController.navigateToParentCategory();
-    }
-
-    private void registerBackNavigationCallback() {
-        if (Build.VERSION.SDK_INT >= 33) registerBackNavigationCallbackApi33();
-    }
-
-    @TargetApi(33)
-    private void registerBackNavigationCallbackApi33() {
-        android.window.OnBackInvokedCallback callback = () -> {
-            if (!navigateToParentCategoryIfPossible()) finish();
-        };
-        getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
-                android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, callback);
-        backInvokedCallback = callback;
-    }
-
-    private void unregisterBackNavigationCallback() {
-        if (Build.VERSION.SDK_INT >= 33) unregisterBackNavigationCallbackApi33();
-    }
-
-    @TargetApi(33)
-    private void unregisterBackNavigationCallbackApi33() {
-        if (backInvokedCallback instanceof android.window.OnBackInvokedCallback) {
-            getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(
-                    (android.window.OnBackInvokedCallback) backInvokedCallback);
-            backInvokedCallback = null;
-        }
     }
 
     private void registerScreenOffReceiver() {

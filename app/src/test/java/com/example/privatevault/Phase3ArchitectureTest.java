@@ -89,7 +89,8 @@ public class Phase3ArchitectureTest {
                 "src/main/java/com/example/privatevault/VaultBrowserController.java");
         String toolbar = readProjectFile("src/main/res/layout/view_vault_toolbar.xml");
 
-        assertTrue(actions.contains("void onSearchRequested();"));
+        assertTrue(actions.contains("void onVaultSearchRequested();"));
+        assertFalse(actions.contains("void onSearchRequested();"));
         assertTrue(activity.contains("browserState.forScreen(VaultScreen.SEARCH_RESULTS)"));
         assertTrue(activity.contains("returnFromSearchResultsIfPossible()"));
         assertTrue(browser.contains("R.id.toolbar_search"));

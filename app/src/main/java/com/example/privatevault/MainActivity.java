@@ -204,7 +204,6 @@ public class MainActivity extends Activity implements
         browserController.restoreNavigationState(browserState);
         return true;
     }
-
     private boolean navigateToParentCategoryIfPossible() {
         VaultNavigationState current = screenRouter.currentState();
         return vaultSession.isUnlocked()
@@ -690,7 +689,7 @@ public class MainActivity extends Activity implements
     }
 
     @Override
-    public void onSearchRequested() {
+    public void onVaultSearchRequested() {
         VaultNavigationState current = screenRouter.currentState();
         if (!vaultSession.isUnlocked() || current == null
                 || current.screen() != VaultScreen.VAULT_BROWSER) return;

@@ -2,7 +2,7 @@ package com.example.privatevault;
 
 /** Typed browser events. Controllers pass identifiers and non-secret labels only. */
 interface VaultBrowserActions {
-    void onSearchRequested();
+    void onVaultSearchRequested();
     void onLockRequested();
     void onCategorySelected(String categoryName);
     void onItemSelected(long itemId);

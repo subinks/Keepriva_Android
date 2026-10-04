@@ -63,7 +63,7 @@ final class VaultBrowserController implements VaultController {
         search.setImageResource(R.drawable.ic_keepriva_search);
         search.setContentDescription("Search vault");
         search.setTooltipText("Search vault");
-        search.setOnClickListener(v -> actions.onSearchRequested());
+        search.setOnClickListener(v -> actions.onVaultSearchRequested());
         ImageButton lock = root.findViewById(R.id.toolbar_action);
         lock.setImageResource(R.drawable.ic_keepriva_lock);
         lock.setContentDescription("Lock vault");

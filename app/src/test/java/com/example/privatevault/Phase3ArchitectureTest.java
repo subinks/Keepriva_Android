@@ -74,6 +74,8 @@ public class Phase3ArchitectureTest {
         assertTrue(activity.contains("itemDialogController.clearSessionState()"));
         assertTrue(browser.contains("target.post(() ->"));
         assertTrue(browser.contains("generation != renderGeneration"));
+        assertTrue(browser.contains("private PopupMenu activeQuickAddMenu;"));
+        assertTrue(browser.contains("dismissQuickAddMenu();"));
         assertTrue(dialogs.contains("actions.onItemDialogClosed()"));
         assertTrue(dialogs.contains("dialogWorkflow.beginTransition()"));
     }

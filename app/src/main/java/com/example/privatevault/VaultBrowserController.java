@@ -36,6 +36,7 @@ final class VaultBrowserController implements VaultController {
     private TextView categoryHeading;
     private TextView itemHeading;
     private FrameLayout emptyContainer;
+    private PopupMenu activeQuickAddMenu;
     private boolean suppressNavigationEvents;
     private int renderGeneration;
     private boolean closed;
@@ -165,6 +166,7 @@ final class VaultBrowserController implements VaultController {
 
     void clearSessionState() {
         renderGeneration++;
+        dismissQuickAddMenu();
         suppressNavigationEvents = false;
         selectedCategory = "All";
         categoryAdapter.submitRows(null);
@@ -308,7 +310,9 @@ final class VaultBrowserController implements VaultController {
     }
 
     private void showQuickAddMenu(View anchor) {
+        dismissQuickAddMenu();
         PopupMenu menu = new PopupMenu(activity, anchor);
+        activeQuickAddMenu = menu;
         menu.getMenu().add("Entry");
         menu.getMenu().add("Sub Category");
         menu.setOnMenuItemClickListener(item -> {
@@ -325,7 +329,16 @@ final class VaultBrowserController implements VaultController {
             }
             return false;
         });
+        menu.setOnDismissListener(dismissed -> {
+            if (activeQuickAddMenu == dismissed) activeQuickAddMenu = null;
+        });
         menu.show();
+    }
+
+    private void dismissQuickAddMenu() {
+        PopupMenu menu = activeQuickAddMenu;
+        activeQuickAddMenu = null;
+        if (menu != null) menu.dismiss();
     }
 
     private void emitNavigationState() {

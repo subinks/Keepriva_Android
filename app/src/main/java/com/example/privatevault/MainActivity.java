@@ -187,7 +187,22 @@ public class MainActivity extends Activity implements
     @Override
     @SuppressLint("GestureBackNavigation")
     public void onBackPressed() {
-        if (!navigateToParentCategoryIfPossible()) super.onBackPressed();
+        if (!returnFromSearchResultsIfPossible()
+                && !navigateToParentCategoryIfPossible()) {
+            super.onBackPressed();
+        }
+    }
+
+    private boolean returnFromSearchResultsIfPossible() {
+        VaultNavigationState current = screenRouter.currentState();
+        if (!vaultSession.isUnlocked() || current == null
+                || current.screen() != VaultScreen.SEARCH_RESULTS
+                || !screenRouter.canGoBack()) return false;
+        VaultNavigationState browserState = screenRouter.goBack();
+        if (browserState == null || browserState.screen() != VaultScreen.VAULT_BROWSER) return false;
+        renderRootScreen(browserController.createView(), browserState);
+        browserController.restoreNavigationState(browserState);
+        return true;
     }
 
     private boolean navigateToParentCategoryIfPossible() {
@@ -672,6 +687,25 @@ public class MainActivity extends Activity implements
     @Override
     public void onSecuritySettingsClosed() {
         if (vaultSession.isUnlocked()) showVaultScreen();
+    }
+
+    @Override
+    public void onSearchRequested() {
+        VaultNavigationState current = screenRouter.currentState();
+        if (!vaultSession.isUnlocked() || current == null
+                || current.screen() != VaultScreen.VAULT_BROWSER) return;
+        VaultNavigationState browserState = browserController.snapshotNavigationState();
+        screenRouter.replaceCurrent(browserState);
+        VaultNavigationState searchState = browserState.forScreen(VaultScreen.SEARCH_RESULTS);
+        screenRouter.navigate(searchState);
+        renderRootScreen(VaultUiComponents.emptyState(
+                this,
+                "Search route ready",
+                "Keepriva has reached the protected search destination. "
+                        + "The complete search-results screen is implemented in Phase 04.",
+                false,
+                "Back to vault",
+                v -> returnFromSearchResultsIfPossible()), searchState);
     }
 
     @Override

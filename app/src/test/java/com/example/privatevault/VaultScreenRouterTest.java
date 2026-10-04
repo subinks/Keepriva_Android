@@ -59,6 +59,23 @@ public class VaultScreenRouterTest {
     }
 
     @Test
+    public void searchRoute_preservesBrowserMetadataAndReturnsToBrowser() {
+        VaultScreenRouter router = new VaultScreenRouter();
+        VaultNavigationState browser = VaultNavigationState
+                .vaultBrowser("Work", "github", 180);
+
+        router.reset(browser);
+        router.navigate(browser.forScreen(VaultScreen.SEARCH_RESULTS));
+
+        assertEquals(VaultScreen.SEARCH_RESULTS, router.currentState().screen());
+        assertEquals("Work", router.currentState().currentCategory());
+        assertEquals("github", router.currentState().searchQuery());
+        assertEquals(180, router.currentState().listScrollPosition());
+        assertEquals(browser, router.goBack());
+        assertFalse(router.canGoBack());
+    }
+
+    @Test
     public void detailsToEditor_replacesModalRouteAndKeepsOneBrowserHistoryEntry() {
         VaultScreenRouter router = new VaultScreenRouter();
         VaultNavigationState browser = VaultNavigationState.vaultBrowser("Work", "", 210);

@@ -80,6 +80,30 @@ public class Phase3ArchitectureTest {
         assertTrue(dialogs.contains("dialogWorkflow.beginTransition()"));
     }
 
+    @Test
+    public void waveC2ToolbarActions_areTypedRoutedAndLifecycleBound() throws Exception {
+        String activity = readProjectFile("src/main/java/com/example/privatevault/MainActivity.java");
+        String actions = readProjectFile(
+                "src/main/java/com/example/privatevault/VaultBrowserActions.java");
+        String browser = readProjectFile(
+                "src/main/java/com/example/privatevault/VaultBrowserController.java");
+        String toolbar = readProjectFile("src/main/res/layout/view_vault_toolbar.xml");
+
+        assertTrue(actions.contains("void onSearchRequested();"));
+        assertTrue(activity.contains("browserState.forScreen(VaultScreen.SEARCH_RESULTS)"));
+        assertTrue(activity.contains("returnFromSearchResultsIfPossible()"));
+        assertTrue(browser.contains("R.id.toolbar_search"));
+        assertTrue(browser.contains("R.id.toolbar_overflow"));
+        assertTrue(browser.contains("private PopupMenu activeOverflowMenu;"));
+        assertTrue(browser.contains("dismissPopupMenus();"));
+        assertTrue(browser.contains("VaultBrowserOverflowAction.fromMenuItemId("));
+        assertFalse(browser.contains("handleOverflowAction(String"));
+        assertTrue(browser.contains("actions.onExportRequested(selectedCategory)"));
+        assertTrue(toolbar.contains("@+id/toolbar_search"));
+        assertTrue(toolbar.contains("@+id/toolbar_action"));
+        assertTrue(toolbar.contains("@+id/toolbar_overflow"));
+    }
+
     private static String readProjectFile(String relative) throws Exception {
         Path path = Paths.get(relative);
         if (!Files.exists(path)) path = Paths.get("app").resolve(relative);

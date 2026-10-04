@@ -24,7 +24,11 @@ public final class VaultUiComponents {
         View root = inflate(context, R.layout.view_vault_toolbar);
         TextView title = root.findViewById(R.id.toolbar_title);
         TextView subtitle = root.findViewById(R.id.toolbar_subtitle);
+        ImageButton searchButton = root.findViewById(R.id.toolbar_search);
         ImageButton actionButton = root.findViewById(R.id.toolbar_action);
+        ImageButton overflowButton = root.findViewById(R.id.toolbar_overflow);
+        searchButton.setVisibility(View.GONE);
+        overflowButton.setVisibility(View.GONE);
         title.setText(safe(titleText));
         subtitle.setText(safe(subtitleText));
         subtitle.setVisibility(safe(subtitleText).isEmpty() ? View.GONE : View.VISIBLE);
@@ -106,4 +110,3 @@ public final class VaultUiComponents {
         return value == null ? "" : value;
     }
 }
-

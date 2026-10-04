@@ -2,6 +2,7 @@ package com.example.privatevault;
 
 import android.app.Activity;
 import android.view.LayoutInflater;
+import android.view.Menu;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
@@ -37,6 +38,7 @@ final class VaultBrowserController implements VaultController {
     private TextView itemHeading;
     private FrameLayout emptyContainer;
     private PopupMenu activeQuickAddMenu;
+    private PopupMenu activeOverflowMenu;
     private boolean suppressNavigationEvents;
     private int renderGeneration;
     private boolean closed;
@@ -56,11 +58,23 @@ final class VaultBrowserController implements VaultController {
         scrollView = root.findViewById(R.id.vault_browser_scroll);
         toolbarTitle = root.findViewById(R.id.toolbar_title);
         toolbarSubtitle = root.findViewById(R.id.toolbar_subtitle);
+        ImageButton search = root.findViewById(R.id.toolbar_search);
+        search.setVisibility(View.VISIBLE);
+        search.setImageResource(R.drawable.ic_keepriva_search);
+        search.setContentDescription("Search vault");
+        search.setTooltipText("Search vault");
+        search.setOnClickListener(v -> actions.onSearchRequested());
         ImageButton lock = root.findViewById(R.id.toolbar_action);
         lock.setImageResource(R.drawable.ic_keepriva_lock);
         lock.setContentDescription("Lock vault");
         lock.setTooltipText("Lock vault");
         lock.setOnClickListener(v -> actions.onLockRequested());
+        ImageButton overflow = root.findViewById(R.id.toolbar_overflow);
+        overflow.setVisibility(View.VISIBLE);
+        overflow.setImageResource(R.drawable.ic_keepriva_more);
+        overflow.setContentDescription("More vault actions");
+        overflow.setTooltipText("More vault actions");
+        overflow.setOnClickListener(this::showOverflowMenu);
 
         breadcrumb = root.findViewById(R.id.browser_breadcrumb);
         categoryHeading = root.findViewById(R.id.browser_category_heading);
@@ -166,7 +180,7 @@ final class VaultBrowserController implements VaultController {
 
     void clearSessionState() {
         renderGeneration++;
-        dismissQuickAddMenu();
+        dismissPopupMenus();
         suppressNavigationEvents = false;
         selectedCategory = "All";
         categoryAdapter.submitRows(null);
@@ -310,7 +324,7 @@ final class VaultBrowserController implements VaultController {
     }
 
     private void showQuickAddMenu(View anchor) {
-        dismissQuickAddMenu();
+        dismissPopupMenus();
         PopupMenu menu = new PopupMenu(activity, anchor);
         activeQuickAddMenu = menu;
         menu.getMenu().add("Entry");
@@ -339,6 +353,58 @@ final class VaultBrowserController implements VaultController {
         PopupMenu menu = activeQuickAddMenu;
         activeQuickAddMenu = null;
         if (menu != null) menu.dismiss();
+    }
+
+    private void showOverflowMenu(View anchor) {
+        dismissPopupMenus();
+        PopupMenu menu = new PopupMenu(activity, anchor);
+        activeOverflowMenu = menu;
+        for (VaultBrowserOverflowAction action : VaultBrowserOverflowAction.values()) {
+            menu.getMenu().add(Menu.NONE, action.menuItemId(), Menu.NONE, action.label());
+        }
+        menu.setOnMenuItemClickListener(item ->
+                handleOverflowAction(VaultBrowserOverflowAction.fromMenuItemId(item.getItemId())));
+        menu.setOnDismissListener(dismissed -> {
+            if (activeOverflowMenu == dismissed) activeOverflowMenu = null;
+        });
+        menu.show();
+    }
+
+    private boolean handleOverflowAction(VaultBrowserOverflowAction action) {
+        if (action == null) return false;
+        switch (action) {
+            case MANAGE_CATEGORIES:
+                actions.onManageCategoriesRequested();
+                return true;
+            case IMPORT:
+                actions.onImportRequested();
+                return true;
+            case EXPORT:
+                actions.onExportRequested(selectedCategory);
+                return true;
+            case BACKUP_RESTORE:
+                actions.onBackupRestoreRequested();
+                return true;
+            case PREFERENCES:
+                actions.onPreferencesRequested();
+                return true;
+            case SECURITY:
+                actions.onSecurityRequested();
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private void dismissOverflowMenu() {
+        PopupMenu menu = activeOverflowMenu;
+        activeOverflowMenu = null;
+        if (menu != null) menu.dismiss();
+    }
+
+    private void dismissPopupMenus() {
+        dismissQuickAddMenu();
+        dismissOverflowMenu();
     }
 
     private void emitNavigationState() {

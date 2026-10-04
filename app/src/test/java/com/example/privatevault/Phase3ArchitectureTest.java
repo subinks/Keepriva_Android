@@ -69,6 +69,7 @@ public class Phase3ArchitectureTest {
         assertFalse(activity.contains("registerOnBackInvokedCallback("));
         assertTrue(manifest.contains("android:enableOnBackInvokedCallback=\"false\""));
         assertTrue(activity.contains("screenRouter.navigate("));
+        assertTrue(activity.contains("screenRouter.completeItemSave(categoryName)"));
         assertTrue(activity.contains("browserController.restoreNavigationState(browserState)"));
         assertTrue(activity.contains("itemDialogController.clearSessionState()"));
         assertTrue(browser.contains("target.post(() ->"));

@@ -1056,7 +1056,10 @@ public class MainActivity extends Activity implements
                 .withSelectedItemId(itemId));
     }
 
-    @Override public void onItemSaved(long itemId, String categoryName) { loadItems(); }
+    @Override public void onItemSaved(long itemId, String categoryName) {
+        loadItems();
+        restoreBrowserState(screenRouter.completeItemSave(categoryName));
+    }
 
     @Override public void onItemDeleted(long itemId) { loadItems(); }
 
@@ -1071,7 +1074,10 @@ public class MainActivity extends Activity implements
                 || !screenRouter.canGoBack()) {
             return;
         }
-        VaultNavigationState browserState = screenRouter.goBack();
+        restoreBrowserState(screenRouter.goBack());
+    }
+
+    private void restoreBrowserState(VaultNavigationState browserState) {
         if (browserState == null || browserState.screen() != VaultScreen.VAULT_BROWSER) return;
         selectedHomeCategory = safe(browserState.currentCategory()).isEmpty()
                 ? "All"

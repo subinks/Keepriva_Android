@@ -76,6 +76,54 @@ public class VaultScreenRouterTest {
     }
 
     @Test
+    public void newItemSave_returnsToSavedCategorySoCreatedRowIsVisible() {
+        VaultScreenRouter router = new VaultScreenRouter();
+        VaultNavigationState all = VaultNavigationState.vaultBrowser("All", "", 90);
+        router.reset(all);
+        router.navigate(all
+                .forScreen(VaultScreen.ITEM_EDITOR)
+                .withSelectedItemId(VaultNavigationState.NO_ID));
+
+        VaultNavigationState result = router.completeItemSave("Login");
+
+        assertEquals(VaultScreen.VAULT_BROWSER, result.screen());
+        assertEquals("Login", result.currentCategory());
+        assertEquals("", result.searchQuery());
+        assertEquals(0, result.listScrollPosition());
+        assertEquals(0, router.backStackSize());
+    }
+
+    @Test
+    public void existingItemSave_preservesPreviousBrowserQueryAndScroll() {
+        VaultScreenRouter router = new VaultScreenRouter();
+        VaultNavigationState browser = VaultNavigationState
+                .vaultBrowser("Work", "github", 180);
+        router.reset(browser);
+        router.navigate(browser
+                .forScreen(VaultScreen.ITEM_EDITOR)
+                .withSelectedItemId(42L));
+
+        VaultNavigationState result = router.completeItemSave("Login");
+
+        assertSame(browser, result);
+        assertEquals("Work", result.currentCategory());
+        assertEquals("github", result.searchQuery());
+        assertEquals(180, result.listScrollPosition());
+        assertEquals(0, router.backStackSize());
+    }
+
+    @Test
+    public void itemSaveCompletion_withoutActiveEditor_doesNotMutateBrowser() {
+        VaultScreenRouter router = new VaultScreenRouter();
+        VaultNavigationState browser = VaultNavigationState.vaultBrowser("Personal", "bank", 44);
+        router.reset(browser);
+
+        assertSame(browser, router.completeItemSave("Login"));
+        assertSame(browser, router.currentState());
+        assertEquals(0, router.backStackSize());
+    }
+
+    @Test
     public void replaceCurrent_updatesStateWithoutAddingHistory() {
         VaultScreenRouter router = new VaultScreenRouter();
         router.reset(VaultNavigationState.vaultBrowser("All", "", 0));

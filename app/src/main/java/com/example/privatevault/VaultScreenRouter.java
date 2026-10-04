@@ -35,6 +35,32 @@ public final class VaultScreenRouter {
         return currentState;
     }
 
+    /**
+     * Completes a successful item-editor route.
+     *
+     * A newly created item must be shown in the category in which it was saved;
+     * otherwise an editor opened from the All screen would return to All and hide
+     * the new row. Existing-item edits retain the exact browser query and scroll
+     * state from which the details/editor workflow was opened.
+     */
+    public synchronized VaultNavigationState completeItemSave(String savedCategory) {
+        if (currentState == null
+                || currentState.screen() != VaultScreen.ITEM_EDITOR
+                || backStack.isEmpty()) {
+            return currentState;
+        }
+
+        boolean createdItem = currentState.selectedItemId() == VaultNavigationState.NO_ID;
+        currentState = backStack.pop();
+        if (createdItem && currentState.screen() == VaultScreen.VAULT_BROWSER) {
+            String category = savedCategory == null || savedCategory.trim().isEmpty()
+                    ? "All"
+                    : savedCategory;
+            currentState = VaultNavigationState.vaultBrowser(category, "", 0);
+        }
+        return currentState;
+    }
+
     public synchronized void clear() {
         backStack.clear();
         currentState = null;
@@ -48,4 +74,3 @@ public final class VaultScreenRouter {
         return backStack.size();
     }
 }
-

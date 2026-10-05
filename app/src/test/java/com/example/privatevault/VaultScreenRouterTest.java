@@ -38,6 +38,18 @@ public class VaultScreenRouterTest {
     }
 
     @Test
+    public void unlockRoot_usesNeutralCategoryAndClearedBrowserMetadata() {
+        VaultNavigationState unlock = VaultNavigationState.root(VaultScreen.UNLOCK);
+
+        assertEquals(VaultScreen.UNLOCK, unlock.screen());
+        assertEquals("All", unlock.currentCategory());
+        assertEquals("", unlock.searchQuery());
+        assertEquals(VaultNavigationState.NO_ID, unlock.selectedItemId());
+        assertEquals(VaultNavigationState.NO_ID, unlock.selectedHistoryVersionId());
+        assertEquals(0, unlock.listScrollPosition());
+    }
+
+    @Test
     public void back_restoresCompletePreviousNavigationState() {
         VaultScreenRouter router = new VaultScreenRouter();
         VaultNavigationState browser = VaultNavigationState

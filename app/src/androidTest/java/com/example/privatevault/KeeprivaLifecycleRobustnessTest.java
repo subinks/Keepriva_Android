@@ -70,7 +70,9 @@ public class KeeprivaLifecycleRobustnessTest extends KeeprivaTestBase {
             assertEquals(VaultScreen.UNLOCK, activity.currentScreenForTesting());
             assertEquals(0, activity.navigationBackStackSizeForTesting());
             assertFalse(activity.hasSessionKeyForTesting());
-            assertEquals("", activity.navigationStateForTesting().currentCategory());
+            // Unlock is a fresh root route. It must not retain the previously
+            // selected Login category; root routes use the neutral All category.
+            assertEquals("All", activity.navigationStateForTesting().currentCategory());
             assertEquals("", activity.navigationStateForTesting().searchQuery());
         });
     }

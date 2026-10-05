@@ -302,6 +302,9 @@ Scope:
 - remove `LegacyVaultBrowserController`, `VaultBrowserModel`, and
   `VaultBrowserModelBuilder`;
 - remove obsolete recursive-tree state, inline-search wiring, resources, and imports;
+- apply the approved end-of-phase UI corrections: place entry export with the item-detail
+  action strip, compact the vault toolbar without reducing 48 dp touch targets, remove the
+  visible compatibility tools section, and avoid the duplicate root category heading;
 - enforce architecture guards preventing browser rendering in `MainActivity`;
 - write the Phase 03 implementation report;
 - run the complete parallel workflow and marker-triggered serial safety net.

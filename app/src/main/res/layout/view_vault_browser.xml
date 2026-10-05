@@ -17,17 +17,6 @@
 
         <include layout="@layout/view_vault_toolbar" />
 
-        <!-- Removed in Wave C after the dedicated search route is wired. -->
-        <EditText
-            android:id="@+id/browser_compat_search"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:hint="Search title, username, phone, website or notes"
-            android:inputType="text"
-            android:maxLines="1"
-            android:singleLine="true" />
-
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -105,6 +94,7 @@
                 android:text="Subcategories"
                 android:textColor="@color/keepriva_text_primary"
                 android:textSize="16sp"
+                android:visibility="gone"
                 android:textStyle="bold" />
 
             <androidx.recyclerview.widget.RecyclerView
@@ -137,14 +127,5 @@
                 android:layout_height="wrap_content" />
         </LinearLayout>
 
-        <!-- Typed action routes stay visible until Wave C moves them into browser chrome. -->
-        <LinearLayout
-            android:id="@+id/browser_compat_tools"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:background="@color/keepriva_surface"
-            android:orientation="vertical"
-            android:padding="10dp" />
     </LinearLayout>
 </ScrollView>

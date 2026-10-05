@@ -6,10 +6,10 @@
     android:background="@color/keepriva_primary_dark"
     android:gravity="center_vertical"
     android:orientation="horizontal"
-    android:paddingStart="16dp"
-    android:paddingTop="14dp"
-    android:paddingEnd="14dp"
-    android:paddingBottom="14dp">
+    android:paddingStart="12dp"
+    android:paddingTop="8dp"
+    android:paddingEnd="8dp"
+    android:paddingBottom="8dp">
 
     <LinearLayout
         android:layout_width="0dp"
@@ -22,43 +22,43 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:textColor="@android:color/white"
-            android:textSize="24sp"
+            android:textSize="20sp"
             android:textStyle="bold" />
 
         <TextView
             android:id="@+id/toolbar_subtitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:paddingTop="2dp"
+            android:paddingTop="1dp"
             android:textColor="#CCFFFFFF"
             android:textSize="13sp" />
     </LinearLayout>
 
     <ImageButton
         android:id="@+id/toolbar_search"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
         android:background="@android:color/transparent"
-        android:padding="8dp"
+        android:padding="12dp"
         android:scaleType="centerInside"
         android:visibility="gone"
         tools:ignore="ContentDescription" />
 
     <ImageButton
         android:id="@+id/toolbar_action"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
         android:background="@android:color/transparent"
-        android:padding="8dp"
+        android:padding="12dp"
         android:scaleType="centerInside"
         tools:ignore="ContentDescription" />
 
     <ImageButton
         android:id="@+id/toolbar_overflow"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
         android:background="@android:color/transparent"
-        android:padding="8dp"
+        android:padding="12dp"
         android:scaleType="centerInside"
         android:visibility="gone"
         tools:ignore="ContentDescription" />

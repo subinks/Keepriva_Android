@@ -529,7 +529,7 @@ final class CategoryManagementController implements VaultController {
 
     private void addRowIcon(
             LinearLayout row, String name, List<CustomCategory> categories) {
-        String family = VaultBrowserModelBuilder.iconFamily(name, categories);
+        String family = VaultCategoryIconResolver.resolve(name, categories);
         ImageView icon = new ImageView(activity);
         icon.setImageResource(iconFor(family));
         icon.setContentDescription("Category icon " + family);

@@ -160,11 +160,6 @@ final class ItemDialogController implements VaultController {
             }
         }
 
-        ImageButton exportEntry = smallIconButton(R.drawable.ic_keepriva_export,
-                "Export entry", false);
-        exportEntry.setOnClickListener(v -> gateway.exportItem(item.id));
-        body.addView(exportEntry);
-
         if (!safe(item.password).isEmpty()) {
             TextView label = boldLabel("Password");
             body.addView(label);
@@ -200,18 +195,22 @@ final class ItemDialogController implements VaultController {
         detailActions.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
         detailActions.setPadding(0, dp(10), 0, 0);
 
+        ImageButton exportEntry = smallIconButton(R.drawable.ic_keepriva_export,
+                "Export entry", false);
         ImageButton editItem = smallIconButton(R.drawable.ic_keepriva_edit, "Edit item", false);
         ImageButton deleteItem = smallIconButton(R.drawable.ic_keepriva_delete, "Delete item", true);
         ImageButton closeDetails = smallIconButton(R.drawable.ic_keepriva_close, "Close item details", false);
-        detailActions.addView(editItem);
-        LinearLayout.LayoutParams dp1 = new LinearLayout.LayoutParams(dp(40), dp(40)); dp1.leftMargin = dp(8); detailActions.addView(deleteItem, dp1);
-        LinearLayout.LayoutParams cp1 = new LinearLayout.LayoutParams(dp(40), dp(40)); cp1.leftMargin = dp(8); detailActions.addView(closeDetails, cp1);
+        detailActions.addView(exportEntry, detailActionParams(false));
+        detailActions.addView(editItem, detailActionParams(true));
+        detailActions.addView(deleteItem, detailActionParams(true));
+        detailActions.addView(closeDetails, detailActionParams(true));
         body.addView(detailActions, matchWidth());
 
         AlertDialog d = new AlertDialog.Builder(activity)
                 .setTitle(item.title.isEmpty() ? "Vault item" : item.title)
                 .setView(wrap(body))
                 .create();
+        exportEntry.setOnClickListener(v -> gateway.exportItem(item.id));
         editItem.setOnClickListener(v -> {
             if (!active()) return;
             dialogWorkflow.beginTransition();
@@ -223,6 +222,12 @@ final class ItemDialogController implements VaultController {
         closeDetails.setOnClickListener(v -> d.dismiss());
         ScreenSecurityManager.protect(d);
         showWorkflowDialog(d);
+    }
+
+    private LinearLayout.LayoutParams detailActionParams(boolean withStartMargin) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(40), dp(40));
+        if (withStartMargin) params.leftMargin = dp(8);
+        return params;
     }
 
     private void confirmDelete(VaultItem item, AlertDialog parent) {

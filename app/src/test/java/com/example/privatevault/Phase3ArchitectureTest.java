@@ -155,6 +155,62 @@ public class Phase3ArchitectureTest {
         assertTrue(batchRunner.contains("serial-safety-net) readonly EXPECTED_TESTS=95"));
     }
 
+    @Test
+    public void waveE_removesLegacyBrowserAndKeepsMainActivityThin() throws Exception {
+        assertFalse(projectFileExists(
+                "src/main/java/com/example/privatevault/LegacyVaultBrowserController.java"));
+        assertFalse(projectFileExists(
+                "src/main/java/com/example/privatevault/VaultBrowserModel.java"));
+        assertFalse(projectFileExists(
+                "src/main/java/com/example/privatevault/VaultBrowserModelBuilder.java"));
+        assertFalse(projectFileExists(
+                "src/test/java/com/example/privatevault/VaultBrowserModelBuilderTest.java"));
+
+        String activity = readProjectFile("src/main/java/com/example/privatevault/MainActivity.java");
+        String browser = readProjectFile(
+                "src/main/java/com/example/privatevault/VaultBrowserController.java");
+        String layout = readProjectFile("src/main/res/layout/view_vault_browser.xml");
+
+        assertFalse(activity.contains("VaultBrowserModel"));
+        assertFalse(activity.contains("compatibilitySearchModel"));
+        assertFalse(activity.contains("new CategoryRowAdapter"));
+        assertFalse(activity.contains("new ItemRowAdapter"));
+        assertFalse(activity.contains("R.id.browser_"));
+        assertFalse(activity.contains("R.layout.view_vault_browser"));
+        assertFalse(activity.contains("RecyclerView"));
+        assertFalse(activity.contains("LinearLayoutManager"));
+        assertTrue(activity.split("\\R", -1).length <= 1200);
+        assertFalse(browser.contains("VaultBrowserModel"));
+        assertFalse(browser.contains("compatibilitySearch"));
+        assertFalse(browser.contains("bindCompatibilityTools"));
+        assertFalse(browser.contains("Vault tools"));
+        assertTrue(browser.contains("categoryHeading.setText(\"Subcategories\")"));
+        assertTrue(browser.contains("!\"All\".equalsIgnoreCase(selectedCategory)"));
+        assertFalse(layout.contains("browser_compat_search"));
+        assertFalse(layout.contains("browser_compat_tools"));
+        assertFalse(layout.contains("Vault tools"));
+    }
+
+    @Test
+    public void waveE_targetedUiCorrections_areGuarded() throws Exception {
+        String toolbar = readProjectFile("src/main/res/layout/view_vault_toolbar.xml");
+        String dialogs = readProjectFile(
+                "src/main/java/com/example/privatevault/ItemDialogController.java");
+
+        assertTrue(toolbar.contains("android:paddingTop=\"8dp\""));
+        assertTrue(toolbar.contains("android:paddingBottom=\"8dp\""));
+        assertTrue(toolbar.contains("android:textSize=\"20sp\""));
+        assertTrue(countOccurrences(toolbar, "android:layout_width=\"48dp\"") == 3);
+        assertTrue(countOccurrences(toolbar, "android:layout_height=\"48dp\"") == 3);
+
+        int actions = dialogs.indexOf("LinearLayout detailActions =");
+        int export = dialogs.indexOf("\"Export entry\"");
+        int groupAdded = dialogs.indexOf("body.addView(detailActions, matchWidth())");
+        assertTrue(actions >= 0 && export > actions && groupAdded > export);
+        assertTrue(dialogs.contains("detailActions.addView(exportEntry, detailActionParams(false))"));
+        assertFalse(dialogs.contains("body.addView(exportEntry)"));
+    }
+
     private static String readProjectFile(String relative) throws Exception {
         Path[] candidates = {
                 Paths.get(relative),
@@ -167,5 +223,27 @@ public class Phase3ArchitectureTest {
             }
         }
         throw new java.io.IOException("Project file not found: " + relative);
+    }
+
+    private static boolean projectFileExists(String relative) {
+        Path[] candidates = {
+                Paths.get(relative),
+                Paths.get("app").resolve(relative),
+                Paths.get("..").resolve(relative)
+        };
+        for (Path path : candidates) {
+            if (Files.exists(path)) return true;
+        }
+        return false;
+    }
+
+    private static int countOccurrences(String value, String target) {
+        int count = 0;
+        int index = 0;
+        while ((index = value.indexOf(target, index)) >= 0) {
+            count++;
+            index += target.length();
+        }
+        return count;
     }
 }

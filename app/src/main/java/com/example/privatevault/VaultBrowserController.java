@@ -5,10 +5,8 @@ import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.View;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
-import android.widget.LinearLayout;
 import android.widget.PopupMenu;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -16,8 +14,6 @@ import android.widget.TextView;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Objects;
 
 /** Category-first Phase 03 browser. It retains presentation rows and identifiers only. */
@@ -29,7 +25,6 @@ final class VaultBrowserController implements VaultController {
     private final ItemRowAdapter itemAdapter;
 
     private String selectedCategory = "All";
-    private EditText compatibilitySearch;
     private ScrollView scrollView;
     private TextView toolbarTitle;
     private TextView toolbarSubtitle;
@@ -92,13 +87,6 @@ final class VaultBrowserController implements VaultController {
         quickAdd.setOnClickListener(this::showQuickAddMenu);
         Button manage = root.findViewById(R.id.browser_manage_categories);
         manage.setOnClickListener(v -> actions.onManageCategoriesRequested());
-        bindCompatibilityTools(root.findViewById(R.id.browser_compat_tools));
-
-        compatibilitySearch = root.findViewById(R.id.browser_compat_search);
-        compatibilitySearch.addTextChangedListener(new SimpleTextWatcher(() -> {
-            render();
-            emitNavigationState();
-        }));
         scrollView.setOnScrollChangeListener((view, x, y, oldX, oldY) -> emitNavigationState());
         render();
         return root;
@@ -113,9 +101,6 @@ final class VaultBrowserController implements VaultController {
         suppressNavigationEvents = true;
         try {
             selectedCategory = normalizeCategory(categoryName);
-            if (compatibilitySearch != null && compatibilitySearch.getText().length() > 0) {
-                compatibilitySearch.setText("");
-            }
             if (scrollView != null) scrollView.scrollTo(0, 0);
             actions.onCategorySelected(selectedCategory);
             render();
@@ -137,7 +122,7 @@ final class VaultBrowserController implements VaultController {
         ensureOpen();
         return VaultNavigationState.vaultBrowser(
                 selectedCategory,
-                compatibilitySearch == null ? "" : compatibilitySearch.getText().toString(),
+                "",
                 scrollView == null ? 0 : scrollView.getScrollY());
     }
 
@@ -150,10 +135,6 @@ final class VaultBrowserController implements VaultController {
         try {
             selectedCategory = normalizeCategory(state.currentCategory());
             actions.onCategorySelected(selectedCategory);
-            if (compatibilitySearch != null
-                    && !compatibilitySearch.getText().toString().equals(state.searchQuery())) {
-                compatibilitySearch.setText(state.searchQuery());
-            }
             render();
         } finally {
             suppressNavigationEvents = false;
@@ -185,7 +166,6 @@ final class VaultBrowserController implements VaultController {
         selectedCategory = "All";
         categoryAdapter.submitRows(null);
         itemAdapter.submitRows(null);
-        compatibilitySearch = null;
         scrollView = null;
         toolbarTitle = null;
         toolbarSubtitle = null;
@@ -197,14 +177,6 @@ final class VaultBrowserController implements VaultController {
 
     private void render() {
         if (toolbarTitle == null) return;
-        String query = compatibilitySearch == null
-                ? ""
-                : compatibilitySearch.getText().toString().trim();
-        if (!query.isEmpty()) {
-            renderCompatibilitySearch(query);
-            return;
-        }
-
         VaultBrowserViewState state = dataSource.browserState(selectedCategory);
         String normalizedCategory = state.currentCategory().isEmpty()
                 ? "All"
@@ -221,66 +193,14 @@ final class VaultBrowserController implements VaultController {
         breadcrumb.setOnClickListener(v -> selectCategory(
                 state.parentCategory().isEmpty() ? "All" : state.parentCategory(), false));
 
-        categoryHeading.setText("All".equalsIgnoreCase(selectedCategory)
-                ? "Categories"
-                : "Subcategories");
-        categoryHeading.setVisibility(state.subcategories().isEmpty() ? View.GONE : View.VISIBLE);
+        categoryHeading.setText("Subcategories");
+        categoryHeading.setVisibility(!"All".equalsIgnoreCase(selectedCategory)
+                && !state.subcategories().isEmpty() ? View.VISIBLE : View.GONE);
         itemHeading.setText("Items");
         itemHeading.setVisibility(state.items().isEmpty() ? View.GONE : View.VISIBLE);
         categoryAdapter.submitRows(state.subcategories());
         itemAdapter.submitRows(state.items());
         bindEmptyState(state);
-    }
-
-    /**
-     * Wave B compatibility bridge. The old instrumentation selectors are removed in Wave D;
-     * normal browsing always uses the direct-row state above and never expands descendants.
-     */
-    private void renderCompatibilitySearch(String query) {
-        toolbarTitle.setText("Search");
-        toolbarSubtitle.setText("Temporary Phase 03 compatibility route");
-        breadcrumb.setVisibility(View.GONE);
-        VaultBrowserModel model = dataSource.compatibilitySearchModel(query);
-        List<CategoryRowModel> categories = new ArrayList<>();
-        for (VaultBrowserModel.CategoryNode root : model.roots) {
-            addSearchCategories(root, 1, categories);
-        }
-        List<ItemRowModel> items = new ArrayList<>();
-        for (VaultBrowserModel.ItemRow item : model.allCategories.directItems) {
-            items.add(new ItemRowModel(item.id, item.title, "", ""));
-        }
-        categoryHeading.setText("Matching categories");
-        categoryHeading.setVisibility(categories.isEmpty() ? View.GONE : View.VISIBLE);
-        itemHeading.setText("Matching entries");
-        itemHeading.setVisibility(items.isEmpty() ? View.GONE : View.VISIBLE);
-        categoryAdapter.submitRows(categories);
-        itemAdapter.submitRows(items);
-        emptyContainer.removeAllViews();
-        if (categories.isEmpty() && items.isEmpty()) {
-            View empty = VaultUiComponents.emptyState(
-                    activity,
-                    "No matches",
-                    "No matching categories, subcategories or entries.",
-                    false,
-                    "",
-                    null);
-            empty.setContentDescription("No tree search results");
-            emptyContainer.addView(empty);
-        }
-    }
-
-    private void addSearchCategories(
-            VaultBrowserModel.CategoryNode node, int depth, List<CategoryRowModel> rows) {
-        rows.add(new CategoryRowModel(
-                node.name,
-                node.label,
-                node.totalItemCount,
-                depth,
-                true,
-                node.iconFamily));
-        for (VaultBrowserModel.CategoryNode child : node.children) {
-            addSearchCategories(child, depth + 1, rows);
-        }
     }
 
     private void bindEmptyState(VaultBrowserViewState state) {
@@ -297,30 +217,6 @@ final class VaultBrowserController implements VaultController {
                 null);
         empty.setContentDescription(presentation.contentDescription);
         emptyContainer.addView(empty);
-    }
-
-    private void bindCompatibilityTools(LinearLayout tools) {
-        tools.removeAllViews();
-        TextView title = new TextView(activity);
-        title.setText("Vault tools");
-        title.setTextSize(18);
-        title.setTextColor(activity.getColor(R.color.keepriva_text_primary));
-        tools.addView(title);
-        tools.addView(VaultUiComponents.actionRow(activity, R.drawable.ic_keepriva_import,
-                "Import", "Bulk import credentials from Keepriva JSON",
-                v -> actions.onImportRequested()));
-        tools.addView(VaultUiComponents.actionRow(activity, R.drawable.ic_keepriva_export,
-                "Export", "Export the currently selected category",
-                v -> actions.onExportRequested(selectedCategory)));
-        tools.addView(VaultUiComponents.actionRow(activity, R.drawable.ic_keepriva_backup,
-                "Backup & Restore", "Encrypted .pvault backup and recovery",
-                v -> actions.onBackupRestoreRequested()));
-        tools.addView(VaultUiComponents.actionRow(activity, R.drawable.ic_keepriva_settings,
-                "Preferences", "Category nesting and app preferences",
-                v -> actions.onPreferencesRequested()));
-        tools.addView(VaultUiComponents.actionRow(activity, R.drawable.ic_keepriva_security,
-                "Security", "Master password, biometrics and lock settings",
-                v -> actions.onSecurityRequested()));
     }
 
     private void showQuickAddMenu(View anchor) {
@@ -411,7 +307,7 @@ final class VaultBrowserController implements VaultController {
         if (closed || suppressNavigationEvents) return;
         actions.onBrowserNavigationChanged(
                 selectedCategory,
-                compatibilitySearch == null ? "" : compatibilitySearch.getText().toString(),
+                "",
                 scrollView == null ? 0 : scrollView.getScrollY());
     }
 
@@ -436,6 +332,5 @@ final class VaultBrowserController implements VaultController {
 
     interface DataSource {
         VaultBrowserViewState browserState(String categoryName);
-        VaultBrowserModel compatibilitySearchModel(String query);
     }
 }

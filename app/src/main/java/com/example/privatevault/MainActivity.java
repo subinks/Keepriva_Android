@@ -782,12 +782,6 @@ public class MainActivity extends Activity implements
     }
 
     @Override
-    public VaultBrowserModel compatibilitySearchModel(String query) {
-        return VaultBrowserModelBuilder.build(
-                query, allItems, customCategories, activeBuiltInCategories());
-    }
-
-    @Override
     public void onCategorySelected(String categoryName) {
         selectedHomeCategory = safe(categoryName).isEmpty() ? "All" : categoryName;
     }

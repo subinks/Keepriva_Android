@@ -156,9 +156,12 @@ public abstract class KeeprivaTestBase {
     }
 
     protected void waitForHomeScreen() {
-        waitForUiState("home screen", view ->
-                "Search vault".contentEquals(view.getContentDescription())
-                        && view.isShown());
+        waitForUiState("home screen", view -> {
+            CharSequence description = view.getContentDescription();
+            return description != null
+                    && "Search vault".contentEquals(description)
+                    && view.isShown();
+        });
     }
 
     protected void waitForUnlockReady() {

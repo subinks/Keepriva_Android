@@ -140,6 +140,9 @@ public class Phase3ArchitectureTest {
         assertTrue(base.contains("void openVaultAction(String actionLabel)"));
         assertTrue(base.contains("withContentDescription(\"More vault actions\")"));
         assertTrue(base.contains("inRoot(isPlatformPopup())"));
+        assertTrue(base.contains("CharSequence description = view.getContentDescription();"));
+        assertTrue(base.contains("return description != null"));
+        assertTrue(base.contains("\"Search vault\".contentEquals(description)"));
         assertTrue(itemCrud.contains("categoryNavigation_opensDedicatedCategory"));
         assertTrue(itemCrud.contains("Empty category Banking"));
         assertTrue(visual.contains("02-vault-root.png"));

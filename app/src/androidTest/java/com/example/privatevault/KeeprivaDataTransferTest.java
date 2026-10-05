@@ -45,7 +45,7 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
     public void importDialog_hasBothActions() {
         createTestVault();
 
-        onView(withContentDescription("Import")).perform(scrollTo(), click());
+        openVaultAction("Import");
 
         waitForDialogText("Cancel");
         onView(withContentDescription("Download JSON import template"))
@@ -64,7 +64,7 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
                 .respondWith(new android.app.Instrumentation.ActivityResult(
                         Activity.RESULT_CANCELED, null));
 
-        onView(withContentDescription("Import")).perform(scrollTo(), click());
+        openVaultAction("Import");
         waitForDialogText("Cancel");
         onView(withContentDescription("Download JSON import template"))
                 .inRoot(isDialog())
@@ -85,7 +85,7 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
                 .respondWith(new android.app.Instrumentation.ActivityResult(
                         Activity.RESULT_CANCELED, null));
 
-        onView(withContentDescription("Import")).perform(scrollTo(), click());
+        openVaultAction("Import");
         waitForDialogText("Cancel");
         onView(withContentDescription("Import completed JSON template"))
                 .inRoot(isDialog())
@@ -102,7 +102,7 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
     public void backupDialog_hasCreateAndRestore() {
         createTestVault();
 
-        onView(withContentDescription("Backup & Restore")).perform(scrollTo(), click());
+        openVaultAction("Backup & Restore");
 
         waitForDialogText("Cancel");
         onView(withText("Create encrypted .pvault backup"))
@@ -117,7 +117,7 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
     public void shortBackupPassword_keepsDialogOpen() {
         createTestVault();
 
-        onView(withContentDescription("Backup & Restore")).perform(scrollTo(), click());
+        openVaultAction("Backup & Restore");
         waitForDialogText("Cancel");
         onView(withText("Create encrypted .pvault backup"))
                 .inRoot(isDialog())
@@ -144,7 +144,7 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
     public void mismatchedBackupPasswords_keepDialogOpen() {
         createTestVault();
 
-        onView(withContentDescription("Backup & Restore")).perform(scrollTo(), click());
+        openVaultAction("Backup & Restore");
         waitForDialogText("Cancel");
         onView(withText("Create encrypted .pvault backup"))
                 .inRoot(isDialog())
@@ -175,7 +175,7 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
                 .respondWith(new android.app.Instrumentation.ActivityResult(
                         Activity.RESULT_CANCELED, null));
 
-        onView(withContentDescription("Backup & Restore")).perform(scrollTo(), click());
+        openVaultAction("Backup & Restore");
         waitForDialogText("Cancel");
         onView(withText("Create encrypted .pvault backup"))
                 .inRoot(isDialog())
@@ -216,7 +216,7 @@ public class KeeprivaDataTransferTest extends KeeprivaTestBase {
                 .respondWith(new android.app.Instrumentation.ActivityResult(
                         Activity.RESULT_CANCELED, null));
 
-        onView(withContentDescription("Backup & Restore")).perform(scrollTo(), click());
+        openVaultAction("Backup & Restore");
         waitForDialogText("Cancel");
 
         onView(withText("Restore encrypted .pvault backup"))

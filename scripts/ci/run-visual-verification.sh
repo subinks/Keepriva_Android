@@ -76,6 +76,71 @@ dump_ui() {
   return 1
 }
 
+tap_ui_node() {
+  local attribute="$1"
+  local expected_value="$2"
+
+  python3 - "$attribute" "$expected_value" <<'PY'
+import re
+import subprocess
+import sys
+import time
+import xml.etree.ElementTree as ET
+
+attribute = sys.argv[1]
+expected_value = sys.argv[2]
+last_error = "UI hierarchy was unavailable"
+
+for attempt in range(1, 13):
+    subprocess.run(
+        ["adb", "shell", "rm", "-f", "/sdcard/keepriva-visual-tap.xml"],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    subprocess.run(
+        ["adb", "shell", "uiautomator", "dump", "/sdcard/keepriva-visual-tap.xml"],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    result = subprocess.run(
+        ["adb", "shell", "cat", "/sdcard/keepriva-visual-tap.xml"],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    try:
+        root = ET.fromstring(result.stdout)
+        node = next(
+            (item for item in root.iter("node")
+             if item.attrib.get(attribute) == expected_value),
+            None,
+        )
+        if node is not None:
+            numbers = [int(value) for value in re.findall(r"\d+", node.attrib["bounds"])]
+            if len(numbers) != 4:
+                raise RuntimeError(f"Unexpected bounds: {node.attrib['bounds']}")
+            x1, y1, x2, y2 = numbers
+            subprocess.run(
+                ["adb", "shell", "input", "tap", str((x1 + x2) // 2), str((y1 + y2) // 2)],
+                check=True,
+            )
+            time.sleep(0.75)
+            sys.exit(0)
+        last_error = f"{attribute}={expected_value!r} was not found"
+    except (ET.ParseError, RuntimeError, KeyError) as error:
+        last_error = str(error)
+
+    if attempt < 12:
+        time.sleep(1)
+
+raise RuntimeError(
+    f"Could not tap {attribute}={expected_value!r} after 12 attempts: {last_error}"
+)
+PY
+}
+
 test -s "$TARGET_APK"
 test -s "$TEST_APK"
 
@@ -220,12 +285,43 @@ time.sleep(3)
 PY
 
 dump_ui \
-  /sdcard/keepriva-home.xml \
-  "$UI_DIR/02-vault-home-ui.xml" \
-  "Search title, username, phone, website or notes" \
-  "vault home screen"
-adb exec-out screencap -p > "$SCREENSHOT_DIR/02-vault-home.png"
-grep -q "Search title, username, phone, website or notes" "$UI_DIR/02-vault-home-ui.xml"
+  /sdcard/keepriva-root.xml \
+  "$UI_DIR/02-vault-root-ui.xml" \
+  'content-desc="Search vault"' \
+  "vault root screen"
+adb exec-out screencap -p > "$SCREENSHOT_DIR/02-vault-root.png"
+grep -q 'content-desc="More vault actions"' "$UI_DIR/02-vault-root-ui.xml"
+grep -q 'content-desc="Open category Login"' "$UI_DIR/02-vault-root-ui.xml"
+grep -q 'content-desc="Empty vault"' "$UI_DIR/02-vault-root-ui.xml"
+
+echo "=== Capture populated nested category screen ==="
+tap_ui_node content-desc "Open category Login"
+tap_ui_node content-desc "Add entry or subcategory"
+tap_ui_node text "Entry"
+tap_ui_node content-desc "Item title"
+adb shell input text VisualLogin
+adb shell input keyevent KEYCODE_BACK || true
+tap_ui_node content-desc "Save vault item"
+dump_ui \
+  /sdcard/keepriva-nested.xml \
+  "$UI_DIR/03-vault-nested-category-ui.xml" \
+  'content-desc="Open entry VisualLogin"' \
+  "populated nested category screen"
+adb exec-out screencap -p > "$SCREENSHOT_DIR/03-vault-nested-category.png"
+grep -q 'content-desc="Close category Login"' "$UI_DIR/03-vault-nested-category-ui.xml"
+grep -q 'text="‹  All / Login"' "$UI_DIR/03-vault-nested-category-ui.xml"
+
+echo "=== Capture deterministic empty category screen ==="
+tap_ui_node content-desc "Close category Login"
+tap_ui_node content-desc "Open category Banking"
+dump_ui \
+  /sdcard/keepriva-empty-category.xml \
+  "$UI_DIR/04-vault-empty-category-ui.xml" \
+  'content-desc="Empty category Banking"' \
+  "empty category screen"
+adb exec-out screencap -p > "$SCREENSHOT_DIR/04-vault-empty-category.png"
+grep -q 'content-desc="Close category Banking"' "$UI_DIR/04-vault-empty-category-ui.xml"
+grep -q 'text="‹  All / Banking"' "$UI_DIR/04-vault-empty-category-ui.xml"
 
 echo "=== Capture master-password unlock screen ==="
 adb shell am force-stop "$TARGET_PACKAGE"
@@ -235,12 +331,12 @@ adb shell am start -W -n "$TARGET_PACKAGE/$ACTIVITY"
 sleep 3
 dump_ui \
   /sdcard/keepriva-unlock.xml \
-  "$UI_DIR/03-real-unlock-ui.xml" \
+  "$UI_DIR/05-real-unlock-ui.xml" \
   'content-desc="Master password"' \
   "master-password unlock screen"
-adb exec-out screencap -p > "$SCREENSHOT_DIR/03-real-unlock-screen.png"
-grep -q 'content-desc="Master password"' "$UI_DIR/03-real-unlock-ui.xml"
-grep -q 'content-desc="Unlock with master password"' "$UI_DIR/03-real-unlock-ui.xml"
+adb exec-out screencap -p > "$SCREENSHOT_DIR/05-real-unlock-screen.png"
+grep -q 'content-desc="Master password"' "$UI_DIR/05-real-unlock-ui.xml"
+grep -q 'content-desc="Unlock with master password"' "$UI_DIR/05-real-unlock-ui.xml"
 
 echo "=== Run optional non-blocking biometric diagnostic ==="
 {
@@ -293,18 +389,18 @@ sleep 3
 
 dump_ui \
   /sdcard/keepriva-biometric.xml \
-  "$UI_DIR/04-biometric-diagnostic-ui.xml" \
+  "$UI_DIR/06-biometric-diagnostic-ui.xml" \
   '<hierarchy' \
   "optional biometric diagnostic screen" || true
-adb exec-out screencap -p > "$SCREENSHOT_DIR/04-biometric-diagnostic.png" || true
+adb exec-out screencap -p > "$SCREENSHOT_DIR/06-biometric-diagnostic.png" || true
 
-if [[ -s "$UI_DIR/04-biometric-diagnostic-ui.xml" ]] \
+if [[ -s "$UI_DIR/06-biometric-diagnostic-ui.xml" ]] \
    && grep -q 'content-desc="Unlock Keepriva with biometrics"' \
-        "$UI_DIR/04-biometric-diagnostic-ui.xml"; then
-  cp "$SCREENSHOT_DIR/04-biometric-diagnostic.png" \
-    "$SCREENSHOT_DIR/04-biometric-unlock-screen.png"
-  cp "$UI_DIR/04-biometric-diagnostic-ui.xml" \
-    "$UI_DIR/04-biometric-unlock-ui.xml"
+        "$UI_DIR/06-biometric-diagnostic-ui.xml"; then
+  cp "$SCREENSHOT_DIR/06-biometric-diagnostic.png" \
+    "$SCREENSHOT_DIR/06-biometric-unlock-screen.png"
+  cp "$UI_DIR/06-biometric-diagnostic-ui.xml" \
+    "$UI_DIR/06-biometric-unlock-ui.xml"
   echo "PASS: biometric-enabled Keepriva UI was available." \
     | tee -a "$LOG_DIR/biometric-environment.txt"
 else
@@ -318,7 +414,9 @@ adb shell dumpsys package "$TARGET_PACKAGE" > "$LOG_DIR/package-dump.txt" || tru
 adb logcat -d > "$LOG_DIR/logcat.txt" || true
 
 test -s "$SCREENSHOT_DIR/01-fresh-install-setup.png"
-test -s "$SCREENSHOT_DIR/02-vault-home.png"
-test -s "$SCREENSHOT_DIR/03-real-unlock-screen.png"
+test -s "$SCREENSHOT_DIR/02-vault-root.png"
+test -s "$SCREENSHOT_DIR/03-vault-nested-category.png"
+test -s "$SCREENSHOT_DIR/04-vault-empty-category.png"
+test -s "$SCREENSHOT_DIR/05-real-unlock-screen.png"
 
 echo "PASS: deterministic visual verification completed."

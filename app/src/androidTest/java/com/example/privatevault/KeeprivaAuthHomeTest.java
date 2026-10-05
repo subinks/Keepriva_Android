@@ -10,6 +10,7 @@ import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;
 import static androidx.test.espresso.matcher.ViewMatchers.withHint;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
+import static androidx.test.espresso.matcher.RootMatchers.isPlatformPopup;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.filters.LargeTest;
@@ -76,20 +77,27 @@ public class KeeprivaAuthHomeTest extends KeeprivaTestBase {
     public void home_containsCoreActions() {
         createTestVault();
 
-        onView(withContentDescription("Manage categories")).perform(scrollTo()).check(matches(isDisplayed()));
-        onView(withContentDescription("Import")).perform(scrollTo()).check(matches(isDisplayed()));
-        onView(withContentDescription("Export")).perform(scrollTo()).check(matches(isDisplayed()));
-        onView(withContentDescription("Backup & Restore")).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Search vault")).check(matches(isDisplayed()));
+        onView(withContentDescription("Lock vault")).check(matches(isDisplayed()));
+        onView(withContentDescription("More vault actions")).check(matches(isDisplayed()));
+        onView(withContentDescription("Add entry or subcategory"))
+                .perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Manage categories"))
+                .perform(scrollTo()).check(matches(isDisplayed()));
     }
 
     @Test
-    public void homeAdditionalActions_canBeScrolledIntoView() {
+    public void overflow_containsAllExistingVaultActions() {
         createTestVault();
 
-        // Assert the top header before scrolling the home view downward.
-        onView(withContentDescription("Lock vault")).check(matches(isDisplayed()));
-        onView(withText("Preferences")).perform(scrollTo()).check(matches(isDisplayed()));
-        onView(withText("Security")).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("More vault actions"))
+                .perform(performClickDirectly());
+        onView(withText("Manage categories")).inRoot(isPlatformPopup()).check(matches(isDisplayed()));
+        onView(withText("Import")).inRoot(isPlatformPopup()).check(matches(isDisplayed()));
+        onView(withText("Export")).inRoot(isPlatformPopup()).check(matches(isDisplayed()));
+        onView(withText("Backup & Restore")).inRoot(isPlatformPopup()).check(matches(isDisplayed()));
+        onView(withText("Preferences")).inRoot(isPlatformPopup()).check(matches(isDisplayed()));
+        onView(withText("Security")).inRoot(isPlatformPopup()).check(matches(isDisplayed()));
     }
 
     @Test

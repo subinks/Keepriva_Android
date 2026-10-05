@@ -13,6 +13,7 @@ import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription
 import static androidx.test.espresso.matcher.ViewMatchers.withHint;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 import static androidx.test.espresso.matcher.RootMatchers.isDialog;
+import static androidx.test.espresso.matcher.RootMatchers.isPlatformPopup;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.hasToString;
 import static org.hamcrest.Matchers.is;
@@ -23,7 +24,6 @@ import android.os.SystemClock;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.Spinner;
 
 import androidx.test.core.app.ActivityScenario;
@@ -124,7 +124,7 @@ public abstract class KeeprivaTestBase {
 
         waitForHomeScreen();
 
-        onView(withHint("Search title, username, phone, website or notes"))
+        onView(withContentDescription("Search vault"))
                 .check(matches(isDisplayed()));
     }
 
@@ -151,15 +151,14 @@ public abstract class KeeprivaTestBase {
         // PBKDF2 now runs off the Android main thread.
         waitForHomeScreen();
 
-        onView(withHint("Search title, username, phone, website or notes"))
+        onView(withContentDescription("Search vault"))
                 .check(matches(isDisplayed()));
     }
 
     protected void waitForHomeScreen() {
         waitForUiState("home screen", view ->
-                view instanceof EditText
-                        && "Search title, username, phone, website or notes".contentEquals(
-                                ((EditText) view).getHint()));
+                "Search vault".contentEquals(view.getContentDescription())
+                        && view.isShown());
     }
 
     protected void waitForUnlockReady() {
@@ -352,7 +351,7 @@ public abstract class KeeprivaTestBase {
     }
 
     protected void openSecuritySettings() {
-        onView(withContentDescription("Security")).perform(scrollTo(), click());
+        openVaultAction("Security");
 
         waitForDialogHint("Master password");
         onView(withHint("Master password"))
@@ -379,20 +378,29 @@ public abstract class KeeprivaTestBase {
 
         onView(withText("Save")).perform(click());
 
-        onView(withHint("Search title, username, phone, website or notes"))
-                .perform(scrollTo())
-                .check(matches(isDisplayed()));
+        waitForActivityWindowFocus();
+        waitForHomeScreen();
+        onView(withContentDescription("Search vault")).check(matches(isDisplayed()));
     }
 
     protected void selectHomeCategory(String label) {
         onView(withContentDescription("Open category " + label))
                 .perform(scrollTo(), performClickDirectly());
 
-        waitForUiState("expanded category " + label, view -> {
+        waitForUiState("selected category " + label, view -> {
             CharSequence description = view.getContentDescription();
             return description != null
                     && ("Close category " + label).contentEquals(description);
         });
+    }
+
+    /** Opens one typed browser-overflow action through the Phase 03 toolbar. */
+    protected void openVaultAction(String actionLabel) {
+        onView(withContentDescription("More vault actions"))
+                .perform(performClickDirectly());
+        onView(withText(actionLabel))
+                .inRoot(isPlatformPopup())
+                .perform(click());
     }
     /**
      * Invokes a view's registered OnClickListener directly on the UI thread.

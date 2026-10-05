@@ -105,9 +105,64 @@ public class Phase3ArchitectureTest {
         assertTrue(toolbar.contains("@+id/toolbar_overflow"));
     }
 
+    @Test
+    public void waveDInstrumentation_usesCategoryFirstChromeAndDeterministicVisuals()
+            throws Exception {
+        String[] instrumentationFiles = {
+                "KeeprivaAuthHomeTest.java",
+                "KeeprivaBiometricCiTest.java",
+                "KeeprivaCategoryDeletionTest.java",
+                "KeeprivaCategoryPreferencesTest.java",
+                "KeeprivaDataTransferTest.java",
+                "KeeprivaItemCrudTest.java",
+                "KeeprivaLifecycleRobustnessTest.java",
+                "KeeprivaSecuritySettingsTest.java",
+                "KeeprivaTestBase.java",
+                "KeeprivaUiSmokeTest.java"
+        };
+        StringBuilder instrumentation = new StringBuilder();
+        for (String file : instrumentationFiles) {
+            instrumentation.append(readProjectFile(
+                    "src/androidTest/java/com/example/privatevault/" + file));
+        }
+
+        String tests = instrumentation.toString();
+        String base = readProjectFile(
+                "src/androidTest/java/com/example/privatevault/KeeprivaTestBase.java");
+        String itemCrud = readProjectFile(
+                "src/androidTest/java/com/example/privatevault/KeeprivaItemCrudTest.java");
+        String visual = readProjectFile("scripts/ci/run-visual-verification.sh");
+        String batchRunner = readProjectFile("scripts/ci/run-instrumentation-batch.sh");
+
+        assertFalse(tests.contains("Search title, username, phone, website or notes"));
+        assertFalse(tests.contains("expandsInline"));
+        assertFalse(tests.contains("No tree search results"));
+        assertTrue(base.contains("void openVaultAction(String actionLabel)"));
+        assertTrue(base.contains("withContentDescription(\"More vault actions\")"));
+        assertTrue(base.contains("inRoot(isPlatformPopup())"));
+        assertTrue(itemCrud.contains("categoryNavigation_opensDedicatedCategory"));
+        assertTrue(itemCrud.contains("Empty category Banking"));
+        assertTrue(visual.contains("02-vault-root.png"));
+        assertTrue(visual.contains("03-vault-nested-category.png"));
+        assertTrue(visual.contains("04-vault-empty-category.png"));
+        assertTrue(visual.contains("content-desc=\"Empty category Banking\""));
+        assertTrue(batchRunner.contains("auth-lifecycle-smoke) readonly EXPECTED_TESTS=32"));
+        assertTrue(batchRunner.contains("categories) readonly EXPECTED_TESTS=25"));
+        assertTrue(batchRunner.contains("item-core) readonly EXPECTED_TESTS=14"));
+        assertTrue(batchRunner.contains("serial-safety-net) readonly EXPECTED_TESTS=95"));
+    }
+
     private static String readProjectFile(String relative) throws Exception {
-        Path path = Paths.get(relative);
-        if (!Files.exists(path)) path = Paths.get("app").resolve(relative);
-        return new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
+        Path[] candidates = {
+                Paths.get(relative),
+                Paths.get("app").resolve(relative),
+                Paths.get("..").resolve(relative)
+        };
+        for (Path path : candidates) {
+            if (Files.exists(path)) {
+                return new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
+            }
+        }
+        throw new java.io.IOException("Project file not found: " + relative);
     }
 }

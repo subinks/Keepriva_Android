@@ -10,6 +10,7 @@ import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;
 import static androidx.test.espresso.matcher.ViewMatchers.withHint;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
+import static androidx.test.espresso.matcher.RootMatchers.isPlatformPopup;
 
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -58,7 +59,8 @@ public class KeeprivaBiometricCiTest {
                 .perform(replaceText(PASSWORD), closeSoftKeyboard());
         onView(withText("Create encrypted vault")).perform(click());
 
-        onView(withText("Security")).perform(scrollTo(), click());
+        onView(withContentDescription("More vault actions")).perform(click());
+        onView(withText("Security")).inRoot(isPlatformPopup()).perform(click());
         onView(withHint("Master password"))
                 .perform(replaceText(PASSWORD), closeSoftKeyboard());
         onView(withText("Continue")).perform(click());

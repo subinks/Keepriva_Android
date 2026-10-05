@@ -2,14 +2,11 @@ package com.example.privatevault;
 
 import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.action.ViewActions.click;
-import static androidx.test.espresso.action.ViewActions.closeSoftKeyboard;
-import static androidx.test.espresso.action.ViewActions.replaceText;
 import static androidx.test.espresso.action.ViewActions.scrollTo;
 import static androidx.test.espresso.assertion.ViewAssertions.doesNotExist;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;
-import static androidx.test.espresso.matcher.ViewMatchers.withHint;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 import static androidx.test.espresso.matcher.RootMatchers.isDialog;
 
@@ -140,35 +137,32 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
     }
 
     @Test
-    public void searchMatchingTitle_findsItem() {
+    public void toolbarSearch_reachesProtectedRouteAndReturns() {
         createTestVault();
-        createBasicItem("Searchable Credential");
 
-        onView(withHint("Search title, username, phone, website or notes"))
-                .perform(scrollTo(), replaceText("Searchable"), closeSoftKeyboard());
+        onView(withContentDescription("Search vault")).perform(click());
+        onView(withText("Search route ready")).check(matches(isDisplayed()));
+        onView(withText("Back to vault")).perform(click());
 
-        onView(withContentDescription("Open entry Searchable Credential")).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Search vault")).check(matches(isDisplayed()));
     }
 
     @Test
-    public void searchNoMatch_showsNoMatchingState() {
+    public void emptyCategory_showsDedicatedEmptyState() {
         createTestVault();
-        createBasicItem("Existing Item");
+        selectHomeCategory("Banking");
 
-        onView(withHint("Search title, username, phone, website or notes"))
-                .perform(scrollTo(), replaceText("does-not-exist"), closeSoftKeyboard());
-
-        onView(withContentDescription("No tree search results"))
+        onView(withContentDescription("Empty category Banking"))
                 .perform(scrollTo())
                 .check(matches(isDisplayed()));
     }
 
     @Test
-    public void categoryNavigation_expandsInlineAndShowsEntries() {
+    public void categoryNavigation_opensDedicatedCategoryAndShowsDirectEntries() {
         createTestVault();
         createBasicItem("Login Only Item");
 
-        // Saving the item expands its Login branch.
+        // Saving at the virtual root selects the item's real Login category.
         onView(withContentDescription("Close category Login"))
                 .perform(scrollTo())
                 .check(matches(isDisplayed()));
@@ -177,13 +171,13 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
                 .perform(scrollTo())
                 .check(matches(isDisplayed()));
 
-        // Collapse Login: its entry must disappear from the tree.
+        // Return to the root: direct Login entries must not leak into the root list.
         onView(withContentDescription("Close category Login"))
                 .perform(scrollTo(), performClickDirectly());
 
         onView(withText("Login Only Item")).check(doesNotExist());
 
-        // Expand again: the entry is rendered directly below Login.
+        // Open Login again: its direct entry is restored on the dedicated category screen.
         selectHomeCategory("Login");
 
         onView(withText("Login Only Item"))
@@ -192,20 +186,19 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
     }
 
     @Test
-    public void search_filtersOutNonMatchingEntries() {
+    public void categoryBrowser_doesNotShowItemsFromAnotherCategory() {
         createTestVault();
-        createBasicItem("Alpha Credential");
-        createBasicItem("Beta Credential");
+        createBasicItem("Login Credential");
+        onView(withContentDescription("Close category Login"))
+                .perform(scrollTo(), performClickDirectly());
+        selectHomeCategory("Banking");
+        createBasicItem("Banking Credential");
 
-        onView(withHint("Search title, username, phone, website or notes"))
-                .perform(scrollTo(), replaceText("Alpha"), closeSoftKeyboard());
-
-        onView(withText("Alpha Credential"))
+        onView(withText("Banking Credential"))
                 .perform(scrollTo())
                 .check(matches(isDisplayed()));
 
-        onView(withText("Beta Credential"))
-                .check(doesNotExist());
+        onView(withText("Login Credential")).check(doesNotExist());
     }
     @Test
     public void deleteCancel_keepsItem() {
@@ -232,6 +225,8 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
 
         onView(withContentDescription("Open entry Keep Me"))
                 .perform(scrollTo())
+                .check(matches(isDisplayed()));
+        onView(withContentDescription("Close category Login"))
                 .check(matches(isDisplayed()));
     }
 

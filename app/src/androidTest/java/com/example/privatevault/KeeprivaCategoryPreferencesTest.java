@@ -2,6 +2,7 @@ package com.example.privatevault;
 
 import static androidx.test.espresso.Espresso.onData;
 import static androidx.test.espresso.Espresso.onView;
+import static androidx.test.espresso.Espresso.pressBack;
 import static androidx.test.espresso.action.ViewActions.click;
 import static androidx.test.espresso.action.ViewActions.closeSoftKeyboard;
 import static androidx.test.espresso.action.ViewActions.replaceText;
@@ -14,6 +15,7 @@ import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription
 import static androidx.test.espresso.matcher.ViewMatchers.withHint;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 import static androidx.test.espresso.matcher.RootMatchers.isDialog;
+import static androidx.test.espresso.matcher.RootMatchers.isPlatformPopup;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.hasToString;
 import static org.hamcrest.Matchers.is;
@@ -128,7 +130,7 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
     @Test
     public void preferencesDialog_showsDefaultDepth() {
         createTestVault();
-        onView(withText("Preferences")).perform(scrollTo(), click());
+        openVaultAction("Preferences");
 
         onView(withText("Enable editing category nesting depth"))
                 .inRoot(isDialog())
@@ -141,7 +143,7 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
     @Test
     public void preferencesDialog_showsKeeprivaOwnerDetails() {
         createTestVault();
-        onView(withText("Preferences")).perform(scrollTo(), click());
+        openVaultAction("Preferences");
 
         onView(allOf(
                 withContentDescription("Keepriva owner information"),
@@ -153,7 +155,7 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
     @Test
     public void preferencesRejectsDepthZero() {
         createTestVault();
-        onView(withText("Preferences")).perform(scrollTo(), click());
+        openVaultAction("Preferences");
 
         onView(withText("Enable editing category nesting depth"))
                 .inRoot(isDialog())
@@ -171,7 +173,7 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
     @Test
     public void preferencesRejectsDepthAboveFive() {
         createTestVault();
-        onView(withText("Preferences")).perform(scrollTo(), click());
+        openVaultAction("Preferences");
 
         onView(withText("Enable editing category nesting depth"))
                 .inRoot(isDialog())
@@ -189,7 +191,7 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
     @Test
     public void preferencesAcceptsDepthFive() {
         createTestVault();
-        onView(withText("Preferences")).perform(scrollTo(), click());
+        openVaultAction("Preferences");
 
         onView(withText("Enable editing category nesting depth"))
                 .inRoot(isDialog())
@@ -199,9 +201,9 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
                 .perform(replaceText("5"), closeSoftKeyboard());
         onView(withText("Save")).inRoot(isDialog()).perform(click());
 
-        onView(withHint("Search title, username, phone, website or notes"))
-                .perform(scrollTo())
-                .check(matches(isDisplayed()));
+        waitForActivityWindowFocus();
+        waitForHomeScreen();
+        onView(withContentDescription("Search vault")).check(matches(isDisplayed()));
     }
 
     @Test
@@ -255,7 +257,7 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
 
         onView(withContentDescription("Add entry or subcategory"))
                 .perform(scrollTo(), click());
-        onView(withText("Sub Category")).perform(click());
+        onView(withText("Sub Category")).inRoot(isPlatformPopup()).perform(click());
 
         onView(withHint("Category name"))
                 .perform(replaceText("Login Child"), closeSoftKeyboard());
@@ -323,21 +325,36 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
         onView(withContentDescription("Add entry or subcategory"))
                 .perform(scrollTo(), click());
 
-        onView(withText("Entry")).check(matches(isDisplayed()));
-        onView(withText("Sub Category")).check(matches(isDisplayed()));
+        onView(withText("Entry")).inRoot(isPlatformPopup()).check(matches(isDisplayed()));
+        onView(withText("Sub Category")).inRoot(isPlatformPopup()).check(matches(isDisplayed()));
     }
 
     @Test
-    public void searchForSubCategory_showsTreePath() {
+    public void nestedCategory_showsCompleteBreadcrumbPath() {
         createTestVault();
-        createFolderCategory("Search Child");
+        createFolderCategory("Browse Parent");
+        selectHomeCategory("Browse Parent");
 
-        onView(withHint("Search title, username, phone, website or notes"))
-                .perform(scrollTo(), replaceText("Search Child"), closeSoftKeyboard());
+        onView(withContentDescription("Add entry or subcategory"))
+                .perform(scrollTo(), performClickDirectly());
+        onView(withText("Sub Category"))
+                .inRoot(isPlatformPopup())
+                .perform(click());
+        onView(withHint("Category name"))
+                .perform(replaceText("Browse Child"), closeSoftKeyboard());
+        onView(withText("Save")).perform(click());
 
-        onView(withContentDescription("Close category Search Child"))
-                .perform(scrollTo())
+        onView(withContentDescription("Open category Browse Child"))
+                .perform(scrollTo(), performClickDirectly());
+        onView(withContentDescription("Close category Browse Child"))
                 .check(matches(isDisplayed()));
+        onView(withText("‹  All / Browse Parent / Browse Child"))
+                .check(matches(isDisplayed()));
+
+        pressBack();
+        onView(withContentDescription("Close category Browse Parent"))
+                .check(matches(isDisplayed()));
+        onView(withText("‹  All / Browse Parent")).check(matches(isDisplayed()));
     }
     @Test
     public void customCategoryAppearsInHomeFilter() {

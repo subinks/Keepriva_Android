@@ -4,7 +4,6 @@ import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.action.ViewActions.click;
 import static androidx.test.espresso.action.ViewActions.closeSoftKeyboard;
 import static androidx.test.espresso.action.ViewActions.replaceText;
-import static androidx.test.espresso.action.ViewActions.scrollTo;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.RootMatchers.isDialog;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
@@ -29,7 +28,7 @@ public class KeeprivaSecuritySettingsTest extends KeeprivaTestBase {
     public void securityRequiresReauthentication() {
         createTestVault();
 
-        onView(withContentDescription("Security")).perform(scrollTo(), click());
+        openVaultAction("Security");
 
         waitForDialogHint("Master password");
         onView(withHint("Master password"))
@@ -46,7 +45,7 @@ public class KeeprivaSecuritySettingsTest extends KeeprivaTestBase {
     public void wrongSecurityPassword_keepsDialogOpen() {
         createTestVault();
 
-        onView(withContentDescription("Security")).perform(scrollTo(), click());
+        openVaultAction("Security");
         waitForDialogHint("Master password");
         onView(withHint("Master password"))
                 .inRoot(isDialog())
@@ -274,8 +273,6 @@ public class KeeprivaSecuritySettingsTest extends KeeprivaTestBase {
     }
 
     private void assertHomeDisplayed() {
-        onView(withHint("Search title, username, phone, website or notes"))
-                .perform(scrollTo())
-                .check(matches(isDisplayed()));
+        onView(withContentDescription("Search vault")).check(matches(isDisplayed()));
     }
 }

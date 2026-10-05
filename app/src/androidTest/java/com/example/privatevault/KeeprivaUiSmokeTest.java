@@ -11,6 +11,7 @@ import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription
 import static androidx.test.espresso.matcher.ViewMatchers.withHint;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 import static androidx.test.espresso.matcher.RootMatchers.isDialog;
+import static androidx.test.espresso.matcher.RootMatchers.isPlatformPopup;
 
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -76,8 +77,15 @@ public class KeeprivaUiSmokeTest {
 
         onView(withText("Create encrypted vault")).perform(click());
 
-        onView(withHint("Search title, username, phone, website or notes"))
+        onView(withContentDescription("Search vault"))
                 .check(matches(isDisplayed()));
+    }
+
+    private void openVaultAction(String actionLabel) {
+        onView(withContentDescription("More vault actions")).perform(click());
+        onView(withText(actionLabel))
+                .inRoot(isPlatformPopup())
+                .perform(click());
     }
 
     private void waitForUnlockReady() {
@@ -133,11 +141,11 @@ public class KeeprivaUiSmokeTest {
     public void createVault_opensHomeScreen() {
         createTestVault();
 
-        onView(withHint("Search title, username, phone, website or notes"))
-                .check(matches(isDisplayed()));
-        onView(withContentDescription("Import")).perform(scrollTo()).check(matches(isDisplayed()));
-        onView(withContentDescription("Export")).perform(scrollTo()).check(matches(isDisplayed()));
-        onView(withContentDescription("Backup & Restore")).perform(scrollTo()).check(matches(isDisplayed()));
+        onView(withContentDescription("Search vault")).check(matches(isDisplayed()));
+        onView(withContentDescription("Lock vault")).check(matches(isDisplayed()));
+        onView(withContentDescription("More vault actions")).check(matches(isDisplayed()));
+        onView(withContentDescription("Add entry or subcategory"))
+                .perform(scrollTo()).check(matches(isDisplayed()));
     }
 
     @Test
@@ -187,7 +195,7 @@ public class KeeprivaUiSmokeTest {
     public void importDialog_showsBothActions() {
         createTestVault();
 
-        onView(withContentDescription("Import")).perform(scrollTo(), click());
+        openVaultAction("Import");
 
         onView(withContentDescription("Download JSON import template"))
                 .check(matches(isDisplayed()));
@@ -199,7 +207,7 @@ public class KeeprivaUiSmokeTest {
     public void backupDialog_showsBothActions() {
         createTestVault();
 
-        onView(withContentDescription("Backup & Restore")).perform(scrollTo(), click());
+        openVaultAction("Backup & Restore");
 
         onView(withText("Create encrypted .pvault backup"))
                 .check(matches(isDisplayed()));
@@ -211,18 +219,16 @@ public class KeeprivaUiSmokeTest {
     public void exportWithNoItems_doesNotCrash() {
         createTestVault();
 
-        onView(withContentDescription("Export")).perform(scrollTo(), click());
+        openVaultAction("Export");
 
-        onView(withHint("Search title, username, phone, website or notes"))
-                .perform(scrollTo())
-                .check(matches(isDisplayed()));
+        onView(withContentDescription("Search vault")).check(matches(isDisplayed()));
     }
 
     @Test
     public void preferencesDialog_isReachable() {
         createTestVault();
 
-        onView(withContentDescription("Preferences")).perform(scrollTo(), click());
+        openVaultAction("Preferences");
 
         onView(withText("Preferences")).check(matches(isDisplayed()));
         onView(withText("Enable editing category nesting depth"))
@@ -233,7 +239,7 @@ public class KeeprivaUiSmokeTest {
     public void categoriesDialog_isReachable() {
         createTestVault();
 
-        onView(withContentDescription("Manage categories")).perform(scrollTo(), click());
+        openVaultAction("Manage categories");
 
         onView(withText("Manage Categories")).check(matches(isDisplayed()));
         onView(withContentDescription("Add category"))

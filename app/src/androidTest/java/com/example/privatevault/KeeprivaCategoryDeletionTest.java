@@ -86,7 +86,13 @@ public class KeeprivaCategoryDeletionTest extends KeeprivaTestBase {
         waitForHomeScreen();
 
         onView(withContentDescription("Open category Cascade Root")).check(doesNotExist());
-        onView(withContentDescription("Open category Cascade Child")).check(doesNotExist());
+
+        // Recreate the same hierarchy and prove the deleted item does not reappear.
+        createFolderCategory("Cascade Root");
+        createSubcategory("Cascade Root", "Cascade Child");
+        selectHomeCategory("Cascade Child");
+        onView(withContentDescription("Empty category Cascade Child"))
+                .perform(scrollTo()).check(matches(isDisplayed()));
         onView(withContentDescription("Open entry Cascade Secret")).check(doesNotExist());
     }
 
@@ -106,10 +112,12 @@ public class KeeprivaCategoryDeletionTest extends KeeprivaTestBase {
         waitForHomeScreen();
 
         onView(withContentDescription("Open category Login")).check(doesNotExist());
-        onView(withHint("Search title, username, phone, website or notes"))
-                .perform(replaceText("Built In Cascade Secret"), closeSoftKeyboard());
-        onView(withContentDescription("Open entry Built In Cascade Secret"))
-                .check(doesNotExist());
+        openCategoryManager();
+        onView(withContentDescription("Delete category Login Cascade Child"))
+                .inRoot(isDialog()).check(doesNotExist());
+        onView(withContentDescription("Close category manager"))
+                .inRoot(isDialog()).perform(click());
+        waitForActivityWindowFocus();
 
         scenario.recreate();
         onView(withContentDescription("Open category Login")).check(doesNotExist());

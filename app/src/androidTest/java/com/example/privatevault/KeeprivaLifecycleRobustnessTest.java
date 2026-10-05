@@ -4,13 +4,9 @@ import android.content.Context;
 
 import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.action.ViewActions.click;
-import static androidx.test.espresso.action.ViewActions.closeSoftKeyboard;
-import static androidx.test.espresso.action.ViewActions.replaceText;
-import static androidx.test.espresso.action.ViewActions.scrollTo;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;
-import static androidx.test.espresso.matcher.ViewMatchers.withHint;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -62,10 +58,9 @@ public class KeeprivaLifecycleRobustnessTest extends KeeprivaTestBase {
     }
 
     @Test
-    public void recreation_discardsInMemoryBrowserQueryAndRequiresUnlock() {
+    public void recreation_discardsInMemoryBrowserStateAndRequiresUnlock() {
         createTestVault();
-        onView(withHint("Search title, username, phone, website or notes"))
-                .perform(replaceText("sensitive query"), closeSoftKeyboard());
+        selectHomeCategory("Login");
 
         scenario.recreate();
 
@@ -75,6 +70,7 @@ public class KeeprivaLifecycleRobustnessTest extends KeeprivaTestBase {
             assertEquals(VaultScreen.UNLOCK, activity.currentScreenForTesting());
             assertEquals(0, activity.navigationBackStackSizeForTesting());
             assertFalse(activity.hasSessionKeyForTesting());
+            assertEquals("", activity.navigationStateForTesting().currentCategory());
             assertEquals("", activity.navigationStateForTesting().searchQuery());
         });
     }
@@ -151,7 +147,7 @@ public class KeeprivaLifecycleRobustnessTest extends KeeprivaTestBase {
         try {
             onView(withText("Unlock")).check(matches(isDisplayed()));
         } catch (Throwable ignored) {
-            onView(withHint("Search title, username, phone, website or notes"))
+            onView(withContentDescription("Search vault"))
                     .check(matches(isDisplayed()));
         }
     }
@@ -173,17 +169,14 @@ public class KeeprivaLifecycleRobustnessTest extends KeeprivaTestBase {
 
         cancelItemEditor();
 
-        onView(withHint("Search title, username, phone, website or notes"))
-                .perform(scrollTo())
-                .check(matches(isDisplayed()));
+        onView(withContentDescription("Search vault")).check(matches(isDisplayed()));
     }
 
     @Test
     public void cancelSecurityReauth_returnsToUsableHome() {
         createTestVault();
 
-        onView(withText("Security"))
-                .perform(androidx.test.espresso.action.ViewActions.scrollTo(), click());
+        openVaultAction("Security");
 
         // This is the Security re-authentication dialog, not the vault-item editor.
         // Target its own dialog-local Cancel button, then wait until MainActivity
@@ -194,8 +187,6 @@ public class KeeprivaLifecycleRobustnessTest extends KeeprivaTestBase {
 
         waitForActivityWindowFocus();
 
-        onView(withHint("Search title, username, phone, website or notes"))
-                .perform(scrollTo())
-                .check(matches(isDisplayed()));
+        onView(withContentDescription("Search vault")).check(matches(isDisplayed()));
     }
 }

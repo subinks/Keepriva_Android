@@ -22,7 +22,6 @@ import static org.hamcrest.Matchers.is;
 
 import android.widget.Spinner;
 
-import androidx.test.espresso.matcher.ViewMatchers;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.filters.LargeTest;
 
@@ -337,11 +336,9 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
 
         onView(withContentDescription("Add entry or subcategory"))
                 .perform(scrollTo(), performClickDirectly());
-        onView(allOf(
-                ViewMatchers.isClickable(),
-                hasDescendant(withText("Sub Category"))))
+        onData(hasToString("Sub Category"))
                 .inRoot(isPlatformPopup())
-                .perform(performClickDirectly());
+                .perform(click());
         onView(withHint("Category name"))
                 .perform(replaceText("Browse Child"), closeSoftKeyboard());
         onView(withText("Save")).perform(click());

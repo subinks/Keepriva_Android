@@ -337,7 +337,9 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
 
         onView(withContentDescription("Add entry or subcategory"))
                 .perform(scrollTo(), performClickDirectly());
-        onView(withText("Sub Category"))
+        onView(allOf(
+                ViewMatchers.isClickable(),
+                hasDescendant(withText("Sub Category"))))
                 .inRoot(isPlatformPopup())
                 .perform(performClickDirectly());
         onView(withHint("Category name"))

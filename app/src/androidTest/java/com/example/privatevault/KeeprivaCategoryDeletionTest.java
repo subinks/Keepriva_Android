@@ -29,7 +29,8 @@ public class KeeprivaCategoryDeletionTest extends KeeprivaTestBase {
         createTestVault();
         onView(withContentDescription("Lock vault"))
                 .check(matches(isDisplayed()))
-                .perform(click());
+                .perform(performClickDirectly());
+        waitForUnlockReady();
         onView(withText("Unlock")).check(matches(isDisplayed()));
     }
 

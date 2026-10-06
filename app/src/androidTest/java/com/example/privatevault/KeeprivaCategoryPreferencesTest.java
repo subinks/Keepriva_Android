@@ -339,7 +339,7 @@ public class KeeprivaCategoryPreferencesTest extends KeeprivaTestBase {
                 .perform(scrollTo(), performClickDirectly());
         onView(withText("Sub Category"))
                 .inRoot(isPlatformPopup())
-                .perform(click());
+                .perform(performClickDirectly());
         onView(withHint("Category name"))
                 .perform(replaceText("Browse Child"), closeSoftKeyboard());
         onView(withText("Save")).perform(click());

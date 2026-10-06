@@ -11,18 +11,10 @@ import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription
 import static androidx.test.espresso.matcher.ViewMatchers.withHint;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 import static androidx.test.espresso.matcher.RootMatchers.isDialog;
-import static androidx.test.espresso.matcher.RootMatchers.isPlatformPopup;
 
-import android.content.Context;
-import android.content.SharedPreferences;
-
-import androidx.test.core.app.ActivityScenario;
-import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.filters.LargeTest;
 
-import org.junit.After;
-import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -39,93 +31,7 @@ import org.junit.runner.RunWith;
  */
 @RunWith(AndroidJUnit4.class)
 @LargeTest
-public class KeeprivaUiSmokeTest {
-
-    private static final String TEST_PASSWORD = "KeeprivaTest123!";
-    private ActivityScenario<MainActivity> scenario;
-
-    @Before
-    public void setUp() {
-        clearAppState();
-        scenario = ActivityScenario.launch(MainActivity.class);
-    }
-
-    @After
-    public void tearDown() {
-        if (scenario != null) scenario.close();
-        clearAppState();
-    }
-
-    private void clearAppState() {
-        Context context = ApplicationProvider.getApplicationContext();
-
-        SharedPreferences prefs =
-                context.getSharedPreferences("vault_config", Context.MODE_PRIVATE);
-        prefs.edit().clear().commit();
-
-        context.deleteDatabase("private_vault.db");
-        context.deleteDatabase("private_vault");
-        context.deleteDatabase("keepriva.db");
-    }
-
-    private void createTestVault() {
-        onView(withHint("Master password (12+ characters)"))
-                .perform(replaceText(TEST_PASSWORD), closeSoftKeyboard());
-
-        onView(withHint("Confirm master password"))
-                .perform(replaceText(TEST_PASSWORD), closeSoftKeyboard());
-
-        onView(withText("Create encrypted vault")).perform(click());
-
-        onView(withContentDescription("Search vault"))
-                .check(matches(isDisplayed()));
-    }
-
-    private void openVaultAction(String actionLabel) {
-        onView(withContentDescription("More vault actions")).perform(click());
-        onView(withText(actionLabel))
-                .inRoot(isPlatformPopup())
-                .perform(click());
-    }
-
-    private void waitForUnlockReady() {
-        final long deadline = android.os.SystemClock.uptimeMillis() + 45000L;
-
-        while (android.os.SystemClock.uptimeMillis() < deadline) {
-            final java.util.concurrent.atomic.AtomicBoolean ready =
-                    new java.util.concurrent.atomic.AtomicBoolean(false);
-
-            scenario.onActivity(activity ->
-                    ready.set(findEnabledUnlock(activity.getWindow().getDecorView())));
-
-            if (ready.get()) {
-                androidx.test.platform.app.InstrumentationRegistry
-                        .getInstrumentation()
-                        .waitForIdleSync();
-                return;
-            }
-
-            android.os.SystemClock.sleep(75L);
-        }
-
-        throw new AssertionError("Timed out waiting for unlock screen");
-    }
-
-    private static boolean findEnabledUnlock(android.view.View view) {
-        if (view instanceof android.widget.Button) {
-            android.widget.Button button = (android.widget.Button) view;
-            if ("Unlock".contentEquals(button.getText()) && button.isEnabled()) return true;
-        }
-
-        if (view instanceof android.view.ViewGroup) {
-            android.view.ViewGroup group = (android.view.ViewGroup) view;
-            for (int i = 0; i < group.getChildCount(); i++) {
-                if (findEnabledUnlock(group.getChildAt(i))) return true;
-            }
-        }
-
-        return false;
-    }
+public class KeeprivaUiSmokeTest extends KeeprivaTestBase {
     @Test
     public void freshInstall_showsSetupScreen() {
         onView(withText("Create Keepriva")).check(matches(isDisplayed()));
@@ -152,7 +58,8 @@ public class KeeprivaUiSmokeTest {
     public void lock_returnsToUnlockScreen() {
         createTestVault();
 
-        onView(withContentDescription("Lock vault")).perform(scrollTo(), click());
+        onView(withContentDescription("Lock vault"))
+                .perform(scrollTo(), performClickDirectly());
 
         onView(withHint("Master password")).check(matches(isDisplayed()));
         onView(withText("Unlock")).check(matches(isDisplayed()));
@@ -162,7 +69,8 @@ public class KeeprivaUiSmokeTest {
     public void wrongMasterPassword_doesNotUnlock() {
         createTestVault();
 
-        onView(withContentDescription("Lock vault")).perform(scrollTo(), click());
+        onView(withContentDescription("Lock vault"))
+                .perform(scrollTo(), performClickDirectly());
 
         onView(withHint("Master password"))
                 .perform(replaceText("WrongPassword123!"), closeSoftKeyboard());

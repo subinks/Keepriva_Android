@@ -140,7 +140,7 @@ public class KeeprivaItemCrudTest extends KeeprivaTestBase {
     public void toolbarSearch_reachesProtectedRouteAndReturns() {
         createTestVault();
 
-        onView(withContentDescription("Search vault")).perform(click());
+        onView(withContentDescription("Search vault")).perform(performClickDirectly());
         onView(withText("Search route ready")).check(matches(isDisplayed()));
         onView(withText("Back to vault")).perform(click());
 
